@@ -1723,6 +1723,15 @@ void init_triton_ir(py::module &&m) {
           },
           py::arg("numWarps") = 4, py::arg("threadsPerWarp") = 32,
           py::arg("numCTAs") = 1, py::arg("computeCapability") = 80)
+      .def(
+          "add_convert_triton_to_omp_pass",
+          [](mlir::PassManager &self, int numWarps, int threadsPerWarp,
+             int numCTAs, int computeCapability) {
+            self.addPass(mlir::triton::createConvertTritonToOmpPass(
+                numWarps, threadsPerWarp, numCTAs, computeCapability));
+          },
+          py::arg("numWarps") = 4, py::arg("threadsPerWarp") = 32,
+          py::arg("numCTAs") = 1, py::arg("computeCapability") = 80)          
       .def("add_tritongpu_pipeline_pass",
            [](mlir::PassManager &self, int numStages, int numWarps, int numCTAs,
               int computeCapability) {

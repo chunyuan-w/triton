@@ -960,6 +960,66 @@ public:
   }
 };
 
+class ConvertTritonToOmp
+    : public ConvertTritonToTritonGPUBase<ConvertTritonToOmp> {
+public:
+  ConvertTritonToOmp() = default;
+  // constructor with some parameters set explicitly.
+  ConvertTritonToOmp(int numWarps, int threadsPerWarp, int numCTAs,
+                           int computeCapability) {
+    this->numWarps = numWarps;
+    this->threadsPerWarp = threadsPerWarp;
+    this->numCTAs = numCTAs;
+    this->computeCapability = computeCapability;
+  }
+
+  void runOnOperation() override {
+    printf("in ConvertTritonToOmp runOnOperation\n");
+    MLIRContext *context = &getContext();
+    ModuleOp mod = getOperation();
+    // // type converter
+    // TritonGPUTypeConverter typeConverter(context, numWarps, threadsPerWarp,
+    //                                      numCTAs);
+    // TritonGPUConversionTarget target(*context, typeConverter);
+    // // rewrite patterns
+    // RewritePatternSet patterns(context);
+    // // add rules
+    // populateStdPatternsAndLegality(typeConverter, patterns, target);
+    // populateArithPatternsAndLegality(typeConverter, patterns, target);
+    // populateMathPatternsAndLegality(typeConverter, patterns, target);
+    // populateTritonPatterns(typeConverter, patterns, numCTAs);
+    // // TODO: can we use
+    // //    mlir::scf::populateSCFStructurealTypeConversionsAndLegality(...) here?
+    // populateSCFPatterns(typeConverter, patterns);
+    // populateCFPatterns(typeConverter, patterns);
+
+    // if (failed(applyPartialConversion(mod, target, std::move(patterns))))
+    //   return signalPassFailure();
+
+    // auto inti = llvm::APSInt(32, false);
+    // auto i32_ty = IntegerType::get(mod->getContext(), 32);
+
+    // mod->setAttr(
+    //     AttrNumWarpsName,
+    //     IntegerAttr::get(i32_ty, llvm::APInt(32, numWarps.getValue())));
+    // mod->setAttr(
+    //     AttrNumThreadsPerWarp,
+    //     IntegerAttr::get(i32_ty, llvm::APInt(32, threadsPerWarp.getValue())));
+
+    // mod->setAttr(AttrNumCTAsName,
+    //              IntegerAttr::get(i32_ty, llvm::APInt(32, numCTAs.getValue())));
+
+    // mod->setAttr(AttrComputeCapabilityName,
+    //              IntegerAttr::get(
+    //                  i32_ty, llvm::APInt(32, computeCapability.getValue())));
+
+    // // update layouts
+    // //  broadcast src => multicast, dst => broadcasted
+    // // if (failed(target.refineLayouts(mod, numWarps)))
+    // //   return signalPassFailure();
+  }
+};
+
 } // namespace
 
 std::unique_ptr<OperationPass<ModuleOp>>
@@ -968,6 +1028,15 @@ mlir::triton::createConvertTritonToTritonGPUPass(int numWarps,
                                                  int numCTAs,
                                                  int computeCapability) {
   return std::make_unique<::ConvertTritonToTritonGPU>(
+      numWarps, threadsPerWarp, numCTAs, computeCapability);
+}
+
+std::unique_ptr<OperationPass<ModuleOp>>
+mlir::triton::createConvertTritonToOmpPass(int numWarps,
+                                                 int threadsPerWarp,
+                                                 int numCTAs,
+                                                 int computeCapability) {
+  return std::make_unique<::ConvertTritonToOmp>(
       numWarps, threadsPerWarp, numCTAs, computeCapability);
 }
 

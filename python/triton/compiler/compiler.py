@@ -74,6 +74,15 @@ def ttir_to_ttgir(mod, num_warps, num_ctas, arch):
     return mod
 
 
+def ttir_to_ompir(mod, num_warps, num_ctas, arch):
+    # TODO (chunyuan): what is in mod.context?
+    pm = ir.pass_manager(mod.context)
+    pm.enable_debug()
+    pm.add_convert_triton_to_omp_pass(num_warps, 32, num_ctas, arch)
+    pm.run(mod)
+    return mod    
+
+
 def optimize_ttgir(mod, num_stages, num_warps, num_ctas, arch,
                    cluster_info, enable_warp_specialization, enable_persistent, optimize_epilogue):
     pm = ir.pass_manager(mod.context)
@@ -219,14 +228,19 @@ def make_hash(fn, arch, env_vars, **kwargs):
         num_warps = kwargs.get("num_warps", 4)
         num_ctas = kwargs.get("num_ctas", 1)
         num_stages = kwargs.get("num_stages", 3)
+        device_type = kwargs.get("device_type", None)
         enable_warp_specialization = kwargs.get("enable_warp_specialization", False)
         enable_persistent = kwargs.get("enable_persistent", False)
-        debug = kwargs.get("debug", False)
+        debug = kwargs.get("debug", False)            
         # Get unique key for the compiled code
         get_conf_key = lambda conf: (sorted(conf.divisible_by_16), sorted(conf.equal_to_1), sorted(conf.ids_of_folded_args), sorted(conf.divisible_by_8))
         configs_key = [get_conf_key(conf) for conf in configs]
         env_vars_list = [f"{env_vars[k]}" for k in sorted(env_vars.keys())]
         key = f"{fn.cache_key}-{''.join(signature.values())}-{configs_key}-{constants}-{num_warps}-{num_stages}-{num_ctas}-{num_stages}-{enable_warp_specialization}-{enable_persistent}-{debug}-{arch}-{env_vars_list}"
+        # TODO (chunyuan): hard code cpu for now
+        if device_type == "cpu":
+            print("cpu included in key gen")
+            key += f"-{device_type}"
         return hashlib.md5(key.encode("utf-8")).hexdigest()
     assert isinstance(fn, str)
     return hashlib.md5((Path(fn).read_text() + version_key()).encode("utf-8")).hexdigest()
@@ -300,6 +314,9 @@ def get_architecture_descriptor(capability):
 def get_arch_default_num_warps(device_type):
     if device_type in ["cuda", "hip"]:
         num_warps = 4
+    elif device_type in ["cpu"]:
+        # TODO (chunyuan): which number on cpu?
+        num_warps = 1
     else:
         _device_backend = get_backend(device_type)
         assert _device_backend
@@ -314,6 +331,9 @@ def get_arch_default_num_stages(device_type, capability=None):
         arch = get_architecture_descriptor(capability)
         is_cuda = device_type == "cuda" and _is_cuda(arch)
         num_stages = 3 if is_cuda and arch >= 75 else 2
+    elif device_type in ["cpu"]:
+        # TODO (chunyuan): which number on cpu?
+        num_stages = 1
     else:
         _device_backend = get_backend(device_type)
         assert _device_backend
@@ -342,6 +362,10 @@ def compile(fn, **kwargs):
     if device_type == "cuda":
         _device_backend = get_backend(device_type)
         arch = get_architecture_descriptor(capability)
+    elif device_type == "cpu":
+        # TODO (chunyuan): define _device_backend and arch for cpu
+        _device_backend = None
+        arch = 80
     else:
         _device_backend = get_backend(device_type)
         assert _device_backend
@@ -388,6 +412,14 @@ def compile(fn, **kwargs):
         add_cuda_stages(arch, extern_libs, stages)
     elif device_type == "hip":
         _device_backend.add_stages(arch, extern_libs, stages, num_warps=num_warps, num_stages=num_stages)
+    elif device_type == "cpu":
+        print("enter cpu")
+        # TODO (chunyuan): add stages for IRs
+        # TODO: add optimize_ompir
+        stages["ompir"] = (lambda path: parse_mlir_module(path, context),
+                           lambda src: ttir_to_ompir(src, num_warps, num_ctas, arch))
+        stages["llir"] = (lambda path: Path(path).read_text(),
+                          lambda src: ompir_to_llir(src, extern_libs, arch, tma_infos))    
     elif device_type == "xpu":
         stages["ttgir"] = (lambda path: parse_mlir_module(path, context),
                            lambda src: optimize_ttgir(ttir_to_ttgir(src, num_warps, num_ctas, arch), num_stages, num_warps, num_ctas, arch, cluster_info, enable_warp_specialization, enable_persistent, optimize_epilogue))
@@ -520,12 +552,16 @@ def compile(fn, **kwargs):
                 metadata["enable_warp_specialization"] = ir.is_ws_supported(next_module)
                 if metadata["enable_warp_specialization"]:
                     metadata["num_warps"] = get_num_warps(next_module)
+        # TODO (chunyuan): ir_name, add a cpu stage? and populate needed metadata.
+        # if ir_name == "ompir":
+        
         if ir_name == "ptx":
             metadata["name"] = get_kernel_name(next_module, pattern='// .globl')
         if ir_name == "amdgcn":
             metadata["name"] = get_kernel_name(next_module[0], pattern='.globl')
             asm["hsaco_path"] = next_module[1]
-        if not is_cuda and not is_hip():
+        # TODO (chunyuan) skip for cpu for now
+        if not is_cuda and not is_hip() and not device_type == "cpu":
             _device_backend.add_meta_info(ir_name, module, next_module, metadata, asm)
         module = next_module
 
@@ -550,7 +586,8 @@ def compile(fn, **kwargs):
     ids_of_const_exprs = tuple(fn.constexprs) if isinstance(fn, JITFunction) else ()
     ids = {"ids_of_tensormaps": ids_of_tensormaps, "ids_of_folded_args": ids_of_folded_args, "ids_of_const_exprs": ids_of_const_exprs}
     # cache manager
-    if is_cuda:
+    # TODO (chunyuan) skip for cpu for now
+    if is_cuda or device_type == "cpu":
         so_path = make_stub(name, signature, constants, ids, enable_warp_specialization=enable_warp_specialization)
     else:
         so_path = _device_backend.make_launcher_stub(name, signature, constants, ids)

@@ -25,6 +25,10 @@ std::unique_ptr<OperationPass<ModuleOp>>
 createConvertTritonToTritonGPUPass(int numWarps, int threadsPerWarp = 32,
                                    int numCTAs = 1, int computeCapability = 80);
 
+std::unique_ptr<OperationPass<ModuleOp>>
+createConvertTritonToOmpPass(int numWarps, int threadsPerWarp = 32,
+                                   int numCTAs = 1, int computeCapability = 80);
+
 } // namespace triton
 } // namespace mlir
 
