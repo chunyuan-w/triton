@@ -906,7 +906,29 @@ struct ConvertOMPToLLVM
     printf("after lower functions\n");
 
 
+    // TODO (chunyuan): 
+    // // initSharedMemory is run before the conversion of call and ret ops,
+    // // because the call op has to know the shared memory base address of each
+    // // function
+    // initSharedMemory(allocation, typeConverter);
 
+
+    // Convert call and ret ops
+    {
+      mlir::LowerToLLVMOptions option(context);
+      TritonGPUToLLVMTypeConverter typeConverter(context, option);
+      TritonLLVMFunctionConversionTarget funcTarget(*context, target);
+      RewritePatternSet funcPatterns(context);
+      funcPatterns.add<CallOpConversion>(typeConverter, numWarps, allocation,
+                                         /*benefit=*/1);
+      funcPatterns.add<ReturnOpConversion>(typeConverter, /*benefit=*/1);
+      if (failed(
+              applyPartialConversion(mod, funcTarget, std::move(funcPatterns))))
+        return signalPassFailure();
+    }
+
+
+    printf("after convert_call_and_ret_ops\n");
 
 
   }
