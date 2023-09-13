@@ -12,6 +12,8 @@ namespace triton {
 
 std::unique_ptr<OperationPass<ModuleOp>> createConvertNVGPUToLLVMPass();
 
+std::unique_ptr<OperationPass<ModuleOp>> createConvertCPUToLLVMPass();
+
 } // namespace triton
 
 } // namespace mlir

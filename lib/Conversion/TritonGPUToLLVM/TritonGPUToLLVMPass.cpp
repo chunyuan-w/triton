@@ -879,11 +879,39 @@ struct ConvertOMPToLLVM
     int numCTAs = triton::gpu::TritonGPUDialect::getNumCTAs(mod);
     int threadsPerWarp = triton::gpu::TritonGPUDialect::getThreadsPerWarp(mod);
 
+    // Preprocess
+    decomposeFp8e4b15Convert(mod);
+    decomposeMmaToDotOperand(mod, numWarps, threadsPerWarp, numCTAs);
+    decomposeBlockedToDotOperand(mod);
+    decomposeInsertSliceAsyncOp(mod);
+    decomposeMixedModeDotOp(mod);
+
     // Allocate shared memory and set barrier
     ModuleAllocation allocation(mod);
     ModuleMembarAnalysis membarPass(&allocation);
     membarPass.run();
 
+    printf("before tensorPtrMap\n");
+    /* Get tensorPtrMap before conversion */
+    TensorPtrMapT tensorPtrMap;
+    mod.walk([&tensorPtrMap](
+                 mlir::triton::nvidia_gpu::InsertSliceAsyncV2Op insertOp) {
+      auto src = insertOp.getSrc();
+      auto ptrTy = src.getType().dyn_cast<triton::PointerType>();
+      if (ptrTy && ptrTy.getPointeeType().isa<RankedTensorType>()) {
+        auto makeTensorPtrOp = getMakeTensorPtrOp(insertOp.getSrc());
+        tensorPtrMap[insertOp.getOperation()] = makeTensorPtrOp;
+      }
+    });
+
+    mod.walk([&tensorPtrMap](mlir::triton::nvidia_gpu::StoreAsyncOp storeOp) {
+      auto dst = storeOp.getDst();
+      auto ptrTy = dst.getType().dyn_cast<triton::PointerType>();
+      if (ptrTy && ptrTy.getPointeeType().isa<RankedTensorType>()) {
+        auto makeTensorPtrOp = getMakeTensorPtrOp(storeOp.getDst());
+        tensorPtrMap[storeOp.getOperation()] = makeTensorPtrOp;
+      }
+    });
 
     printf("before lower functions\n");
 
@@ -913,6 +941,13 @@ struct ConvertOMPToLLVM
     // initSharedMemory(allocation, typeConverter);
 
 
+    // initSharedMemory is run before the conversion of call and ret ops,
+    // because the call op has to know the shared memory base address of each
+    // function
+    initSharedMemory(allocation, typeConverter);
+
+    printf("after initSharedMemory\n");
+
     // Convert call and ret ops
     {
       mlir::LowerToLLVMOptions option(context);
@@ -927,11 +962,369 @@ struct ConvertOMPToLLVM
         return signalPassFailure();
     }
 
+    ModuleAxisInfoAnalysis axisInfoAnalysis(mod);
+
+    // Emit logics to get threadId/blockIds/linearized clusterCTAId etc. and
+    // cache the values. The reason to do it here is that cluster_ctaid is
+    // currently implemented via inline asm, and thus cannot be CSEed.
+    // clusterCTAId will be emitted only when numCTAs is larger than 1, and
+    // other values will be DCEed if not used hereafter.
+    bool isWarpSpecialization =
+        ttng::TritonNvidiaGPUDialect::getWSSupportedAttr(mod);
+    OpBuilder::InsertPoint indexInsertPoint;
+    ConvertTritonGPUOpToLLVMPatternBase::IndexCacheInfo indexCacheInfo{
+        &baseIndexCache, &indexCache, &indexInsertPoint};
+
 
     printf("after convert_call_and_ret_ops\n");
+    RewritePatternSet patterns(context);
 
+    auto populatePatterns1 = [&](auto populateFunc) {
+      populateFunc(typeConverter, patterns, numWarps, axisInfoAnalysis,
+                   allocation, indexCacheInfo,
+                   /*benefit*/ 10);
+    };
+
+    auto populatePatterns2 = [&](auto populateFunc) {
+      populateFunc(typeConverter, patterns, numWarps, axisInfoAnalysis,
+                   allocation, /*benefit*/ 10);
+    };
+
+    auto populatePatterns3 = [&](auto populateFunc) {
+      populateFunc(typeConverter, patterns, numWarps, axisInfoAnalysis,
+                   allocation, indexCacheInfo, tmaMetadata, &tensorPtrMap,
+                   /*benefit*/ 10);
+    };
+
+    auto populatePatterns4 = [&](auto populateFunc) {
+      populateFunc(typeConverter, patterns, numWarps, axisInfoAnalysis,
+                   allocation, indexCacheInfo, computeCapability,
+                   /*benefit*/ 10);
+    };   
+
+    populatePatterns1(populateTritonGPUToLLVMPatterns);
+    populatePatterns1(populateConvertLayoutOpToLLVMPatterns);
+    populatePatterns2(populateDotOpToLLVMPatterns);
+    populatePatterns4(populateElementwiseOpToLLVMPatterns);
+    populatePatterns3(populateLoadStoreOpToLLVMPatterns);
+    populatePatterns4(populateReduceOpToLLVMPatterns);
+    populatePatterns1(populateScanOpToLLVMPatterns);
+    populatePatterns2(populateViewOpToLLVMPatterns);
+    populatePatterns2(populateBarrierOpToLLVMPatterns);
+    populatePatterns2(populateTensorPtrOpsToLLVMPatterns);
+    populatePatterns2(populateClusterOpsToLLVMPatterns);
+    populatePatterns2(populateRegReallocOpToLLVMPatterns);
+
+    // TODO(thomas): this should probably be done in a separate step to not
+    // interfere with our own lowering of arith ops. Add arith/math's patterns
+    // to help convert scalar expression to LLVM.
+    mlir::arith::populateArithToLLVMConversionPatterns(typeConverter, patterns);
+    mlir::populateMathToLLVMConversionPatterns(typeConverter, patterns);
+    
+    // TODO (chunyuan): 0913: GPU specific pass!!!
+    mlir::populateGpuToNVVMConversionPatterns(typeConverter, patterns);
+
+    mlir::cf::populateControlFlowToLLVMConversionPatterns(typeConverter,
+                                                          patterns);
+    
+    // TODO (chunyuan): this is where the pass works
+    if (failed(applyPartialConversion(mod, convTarget, std::move(patterns))))
+      return signalPassFailure();
 
   }
+
+private:
+  DenseMap<IndexCacheKeyT, SmallVector<Value>, CacheKeyDenseMapInfo>
+      baseIndexCache;
+  DenseMap<IndexCacheKeyT, SmallVector<SmallVector<Value>>,
+           CacheKeyDenseMapInfo>
+      indexCache;
+
+  void initSharedMemory(ModuleAllocation &allocation,
+                        TritonGPUToLLVMTypeConverter &typeConverter) {
+    ModuleOp mod = getOperation();
+    OpBuilder b(mod.getBodyRegion());
+    auto ctx = mod.getContext();
+    auto loc = mod.getLoc();
+    auto elemTy = typeConverter.convertType(b.getIntegerType(8));
+    // Set array size 0 and external linkage indicates that we use dynamic
+    // shared allocation to allow a larger shared memory size for each kernel.
+    auto arrayTy = LLVM::LLVMArrayType::get(elemTy, 0);
+    auto global = b.create<LLVM::GlobalOp>(
+        loc, arrayTy, /*isConstant=*/false, LLVM::Linkage::External,
+        "global_smem", /*value=*/Attribute(), /*alignment=*/0,
+        // Add ROCm support.
+        static_cast<unsigned>(NVVM::NVVMMemorySpace::kSharedMemorySpace));
+    mod.walk([&](FunctionOpInterface funcOp) {
+      Value funcSmem;
+      b.setInsertionPointToStart(&funcOp.getFunctionBody().front());
+      if (allocation.isRoot(funcOp)) {
+        funcSmem = b.create<LLVM::AddressOfOp>(loc, global);
+      } else {
+        funcSmem = funcOp.getArgument(funcOp.getNumArguments() - 1);
+      }
+      auto ptrTy =
+          LLVM::LLVMPointerType::get(typeConverter.convertType(b.getI8Type()),
+                                     NVVM::NVVMMemorySpace::kSharedMemorySpace);
+      funcSmem = b.create<LLVM::BitcastOp>(loc, ptrTy, funcSmem);
+      allocation.setFunctionSharedMemoryValue(funcOp, funcSmem);
+    });
+    mod->setAttr("triton_gpu.shared",
+                 mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32),
+                                        allocation.getSharedMemorySize()));
+  }
+
+  void decomposeFp8e4b15Convert(ModuleOp mod) const {
+    mod.walk([&](triton::gpu::ConvertLayoutOp cvtOp) -> void {
+      OpBuilder builder(cvtOp);
+      if (!getElementTypeOrSelf(cvtOp)
+               .isa<mlir::Float8E4M3B11FNUZType, mlir::Float8E4M3FNType>())
+        return;
+      auto shape = cvtOp.getType().cast<RankedTensorType>().getShape();
+      auto argEncoding =
+          cvtOp.getOperand().getType().cast<RankedTensorType>().getEncoding();
+      auto cvtEncoding = cvtOp.getType().cast<RankedTensorType>().getEncoding();
+      if (argEncoding.isa<triton::gpu::DotOperandEncodingAttr>() ||
+          cvtEncoding.isa<triton::gpu::DotOperandEncodingAttr>())
+        return;
+      auto F16Ty = builder.getF16Type();
+
+      auto newArgType = RankedTensorType::get(shape, F16Ty, argEncoding);
+      auto newCvtType = RankedTensorType::get(shape, F16Ty, cvtEncoding);
+      auto newArg = builder.create<mlir::triton::FpToFpOp>(
+          cvtOp.getLoc(), newArgType, cvtOp.getOperand());
+      addWSNamedAttrs(newArg, cvtOp->getAttrs());
+      auto newCvt = builder.create<mlir::triton::gpu::ConvertLayoutOp>(
+          cvtOp.getLoc(), newCvtType, newArg);
+      addWSNamedAttrs(newCvt, cvtOp->getAttrs());
+      auto newRet = builder.create<mlir::triton::FpToFpOp>(
+          cvtOp.getLoc(), cvtOp.getType(), newCvt.getResult());
+      addWSNamedAttrs(newRet, cvtOp->getAttrs());
+      cvtOp.replaceAllUsesWith(newRet.getResult());
+      cvtOp.erase();
+    });
+  }
+
+  void decomposeMmaToDotOperand(ModuleOp mod, int numWarps, int threadsPerWarp,
+                                int numCTAs) const {
+    // Replace `mma -> dot_op` with `mma -> blocked -> dot_op`
+    // unless certain conditions are met
+    mod.walk([&](triton::gpu::ConvertLayoutOp cvtOp) -> void {
+      OpBuilder builder(cvtOp);
+      auto srcType = cvtOp.getOperand().getType().cast<RankedTensorType>();
+      auto dstType = cvtOp.getType().cast<RankedTensorType>();
+      auto srcMma =
+          srcType.getEncoding().dyn_cast<triton::gpu::MmaEncodingAttr>();
+      auto dstDotOp =
+          dstType.getEncoding().dyn_cast<triton::gpu::DotOperandEncodingAttr>();
+      if (srcMma && dstDotOp && !isMmaToDotShortcut(srcType, dstType)) {
+        auto tmpType = RankedTensorType::get(
+            dstType.getShape(), dstType.getElementType(),
+            triton::gpu::BlockedEncodingAttr::get(
+                mod.getContext(), srcType.getShape(), getSizePerThread(srcMma),
+                getOrder(srcMma), numWarps, threadsPerWarp, numCTAs));
+        auto tmp = builder.create<triton::gpu::ConvertLayoutOp>(
+            cvtOp.getLoc(), tmpType, cvtOp.getOperand());
+        addWSNamedAttrs(tmp, cvtOp->getAttrs());
+        auto newConvert = builder.create<triton::gpu::ConvertLayoutOp>(
+            cvtOp.getLoc(), dstType, tmp);
+        addWSNamedAttrs(newConvert, cvtOp->getAttrs());
+        cvtOp.replaceAllUsesWith(newConvert.getResult());
+        cvtOp.erase();
+      }
+    });
+  }
+
+  void decomposeBlockedToDotOperand(ModuleOp mod) const {
+    // Replace `blocked -> dot_op` with `blocked -> shared -> dot_op`
+    // because the codegen doesn't handle `blocked -> dot_op` directly
+    mod.walk([&](triton::gpu::ConvertLayoutOp cvtOp) -> void {
+      OpBuilder builder(cvtOp);
+      auto srcType = cvtOp.getOperand().getType().cast<RankedTensorType>();
+      auto dstType = cvtOp.getType().cast<RankedTensorType>();
+      auto srcBlocked =
+          srcType.getEncoding().dyn_cast<triton::gpu::BlockedEncodingAttr>();
+      auto dstDotOp =
+          dstType.getEncoding().dyn_cast<triton::gpu::DotOperandEncodingAttr>();
+      if (srcBlocked && dstDotOp) {
+        auto tmpType = RankedTensorType::get(
+            dstType.getShape(), dstType.getElementType(),
+            triton::gpu::SharedEncodingAttr::get(
+                mod.getContext(), dstDotOp, srcType.getShape(),
+                srcBlocked.getOrder(), srcBlocked.getCTALayout(),
+                srcType.getElementType()));
+        auto tmp = builder.create<triton::gpu::ConvertLayoutOp>(
+            cvtOp.getLoc(), tmpType, cvtOp.getOperand());
+        addWSNamedAttrs(tmp, cvtOp->getAttrs());
+        auto newConvert = builder.create<triton::gpu::ConvertLayoutOp>(
+            cvtOp.getLoc(), dstType, tmp);
+        addWSNamedAttrs(newConvert, cvtOp->getAttrs());
+        cvtOp.replaceAllUsesWith(newConvert.getResult());
+        cvtOp.erase();
+      }
+    });
+  }
+
+  void decomposeInsertSliceAsyncOp(ModuleOp mod) const {
+    ModuleAxisInfoAnalysis axisInfoAnalysis(mod);
+    // TODO(Keren): This is a hacky knob that may cause performance regression
+    // when decomposition has been performed. We should remove this knob once we
+    // have thorough analysis on async wait. Currently, we decompose
+    // `insert_slice_async` into `load` and `insert_slice` without knowing which
+    // `async_wait` is responsible for the `insert_slice_async`. To guarantee
+    // correctness, we blindly set the `async_wait` to wait for all async ops.
+    //
+    // There are two options to improve this:
+    // 1. We can perform a dataflow analysis to find the `async_wait` that is
+    // responsible for the `insert_slice_async` in the backend.
+    // 2. We can modify the pipeline to perform the decomposition before the
+    // `async_wait` is inserted. However, it is also risky because we don't know
+    // the correct vectorized shape yet in the pipeline pass. Making the
+    // pipeline pass aware of the vectorization could introduce additional
+    // dependencies on the AxisInfoAnalysis and the Coalesce analysis.
+    bool decomposed = false;
+    // insert_slice_async %src, %dst, %idx, %mask, %other
+    // =>
+    // %tmp = load %src, %mask, %other
+    // %res = insert_slice %tmp into %dst[%idx]
+    mod.walk([&](triton::gpu::InsertSliceAsyncOp insertSliceAsyncOp) -> void {
+      OpBuilder builder(insertSliceAsyncOp);
+
+      // Get the vectorized load size
+      auto src = insertSliceAsyncOp.getSrc();
+      auto dst = insertSliceAsyncOp.getDst();
+      auto mask = insertSliceAsyncOp.getMask();
+      auto srcTy = src.getType().cast<RankedTensorType>();
+      auto dstTy = dst.getType().cast<RankedTensorType>();
+      auto srcBlocked =
+          srcTy.getEncoding().dyn_cast<triton::gpu::BlockedEncodingAttr>();
+      auto resSharedLayout =
+          dstTy.getEncoding().dyn_cast<triton::gpu::SharedEncodingAttr>();
+      auto resElemTy = dstTy.getElementType();
+      unsigned inVec = axisInfoAnalysis.getPtrContiguity(src);
+      if (mask)
+        inVec =
+            std::min<unsigned>(axisInfoAnalysis.getMaskAlignment(mask), inVec);
+      unsigned outVec = resSharedLayout.getVec();
+      unsigned minVec = inVec;
+      if (outVec > 1)
+        minVec = std::min(outVec, inVec);
+      auto maxBitWidth =
+          std::max<unsigned>(128, resElemTy.getIntOrFloatBitWidth());
+      auto vecBitWidth = resElemTy.getIntOrFloatBitWidth() * minVec;
+      auto bitWidth = std::min<unsigned>(maxBitWidth, vecBitWidth);
+      auto byteWidth = bitWidth / 8;
+
+      // If the load byte width is not eligible or the current compute
+      // capability does not support async copy, then we do decompose
+      if (triton::gpu::InsertSliceAsyncOp::getEligibleLoadByteWidth(
+              computeCapability)
+              .contains(byteWidth)) {
+        return;
+      }
+
+      // load
+      auto tmpTy =
+          RankedTensorType::get(srcTy.getShape(), resElemTy, srcBlocked);
+      auto loadOp = builder.create<triton::LoadOp>(
+          insertSliceAsyncOp.getLoc(), tmpTy, insertSliceAsyncOp.getSrc(),
+          insertSliceAsyncOp.getMask(), insertSliceAsyncOp.getOther(),
+          // TODO(Chenggang): confirm `boundaryCheck` and `padding`
+          /*boundaryCheck=*/nullptr, /*padding=*/nullptr,
+          insertSliceAsyncOp.getCache(), insertSliceAsyncOp.getEvict(),
+          insertSliceAsyncOp.getIsVolatile());
+      addWSNamedAttrs(loadOp, insertSliceAsyncOp->getAttrs());
+
+      // insert_slice
+      auto axis = insertSliceAsyncOp.getAxis();
+      auto intAttr = [&](int64_t v) { return builder.getI64IntegerAttr(v); };
+      auto offsets = SmallVector<OpFoldResult>(dstTy.getRank(), intAttr(0));
+      auto sizes = SmallVector<OpFoldResult>(dstTy.getRank(), intAttr(1));
+      auto strides = SmallVector<OpFoldResult>(dstTy.getRank(), intAttr(1));
+      offsets[axis] = insertSliceAsyncOp.getIndex();
+      for (size_t i = 0; i < dstTy.getRank(); i++) {
+        if (i != axis)
+          sizes[i] = intAttr(dstTy.getShape()[i]);
+      }
+      auto insertSliceOp = builder.create<tensor::InsertSliceOp>(
+          insertSliceAsyncOp.getLoc(), loadOp, insertSliceAsyncOp.getDst(),
+          offsets, sizes, strides);
+      addWSNamedAttrs(insertSliceOp, insertSliceAsyncOp->getAttrs());
+
+      // Replace
+      insertSliceAsyncOp.replaceAllUsesWith(insertSliceOp.getResult());
+      insertSliceAsyncOp.erase();
+      decomposed = true;
+    });
+
+    mod.walk([&](triton::gpu::AsyncCommitGroupOp asyncCommitGroupOp) -> void {
+      if (!triton::gpu::AsyncCommitGroupOp::isSupported(computeCapability))
+        asyncCommitGroupOp.erase();
+    });
+
+    mod.walk([&](triton::gpu::AsyncWaitOp asyncWaitOp) -> void {
+      if (!triton::gpu::AsyncWaitOp::isSupported(computeCapability)) {
+        // async wait is supported in Ampere and later
+        asyncWaitOp.erase();
+      } else if (decomposed) {
+        // Wait for all previous async ops
+        OpBuilder builder(asyncWaitOp);
+        auto newWaitOp =
+            builder.create<triton::gpu::AsyncWaitOp>(asyncWaitOp.getLoc(), 0);
+        addWSNamedAttrs(newWaitOp, asyncWaitOp->getAttrs());
+        asyncWaitOp.erase();
+      }
+    });
+  }
+
+  static Value promoteOperand(OpBuilder &builder, Location loc, Value operand,
+                              Type promotedType) {
+    Type tensorPromotedType =
+        operand.getType().cast<RankedTensorType>().cloneWith(std::nullopt,
+                                                             promotedType);
+    return builder.create<triton::FpToFpOp>(loc, tensorPromotedType, operand);
+  }
+
+  // promote operands of dot op if the existing combination is not natively
+  // supported.
+  void decomposeMixedModeDotOp(ModuleOp mod) const {
+    mod.walk([](triton::DotOp dotOp) -> void {
+      Value D = dotOp.getResult();
+      OpBuilder builder(dotOp);
+      Type AElType =
+          dotOp.getA().getType().cast<RankedTensorType>().getElementType();
+      Type promoteType;
+      MmaEncodingAttr mmaLayout = D.getType()
+                                      .cast<RankedTensorType>()
+                                      .getEncoding()
+                                      .dyn_cast<MmaEncodingAttr>();
+      if (mmaLayout) {
+        bool isNativeHopperFP8 =
+            AElType.isFloat8E5M2() || AElType.isFloat8E4M3FNUZ();
+        bool isFP8 = isNativeHopperFP8 || AElType.isFloat8E5M2FNUZ() ||
+                     AElType.isFloat8E4M3FN();
+        if (!isFP8 || (isNativeHopperFP8 && mmaLayout.isHopper()))
+          return;
+        promoteType = builder.getF16Type();
+      } else {
+        // FMA case.
+        Type AElType =
+            dotOp.getA().getType().cast<RankedTensorType>().getElementType();
+        Type DElType = D.getType().cast<RankedTensorType>().getElementType();
+        if (AElType == DElType)
+          return;
+        promoteType = DElType;
+      }
+      Location loc = dotOp.getLoc();
+      Value promotedA = promoteOperand(builder, loc, dotOp.getA(), promoteType);
+      Value promotedB = promoteOperand(builder, loc, dotOp.getB(), promoteType);
+      dotOp.setOperand(0, promotedA);
+      dotOp.setOperand(1, promotedB);
+    });
+  }
+
+
+
 
 };
 

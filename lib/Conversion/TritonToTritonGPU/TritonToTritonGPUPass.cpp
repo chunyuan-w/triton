@@ -980,23 +980,23 @@ public:
     // type converter
     TritonGPUTypeConverter typeConverter(context, numWarps, threadsPerWarp,
                                          numCTAs);
-    // TritonGPUConversionTarget target(*context, typeConverter);
-    // // rewrite patterns
-    // RewritePatternSet patterns(context);
-    // // add rules
-    // populateStdPatternsAndLegality(typeConverter, patterns, target);
-    // populateArithPatternsAndLegality(typeConverter, patterns, target);
-    // populateMathPatternsAndLegality(typeConverter, patterns, target);
-    // populateTritonPatterns(typeConverter, patterns, numCTAs);
-    // // TODO: can we use
-    // //    mlir::scf::populateSCFStructurealTypeConversionsAndLegality(...) here?
-    // populateSCFPatterns(typeConverter, patterns);
-    // populateCFPatterns(typeConverter, patterns);
+    TritonGPUConversionTarget target(*context, typeConverter);
+    // rewrite patterns
+    RewritePatternSet patterns(context);
+    // add rules
+    populateStdPatternsAndLegality(typeConverter, patterns, target);
+    populateArithPatternsAndLegality(typeConverter, patterns, target);
+    populateMathPatternsAndLegality(typeConverter, patterns, target);
+    populateTritonPatterns(typeConverter, patterns, numCTAs);
+    // TODO: can we use
+    //    mlir::scf::populateSCFStructurealTypeConversionsAndLegality(...) here?
+    populateSCFPatterns(typeConverter, patterns);
+    populateCFPatterns(typeConverter, patterns);
 
-    // if (failed(applyPartialConversion(mod, target, std::move(patterns))))
-    //   return signalPassFailure();
+    if (failed(applyPartialConversion(mod, target, std::move(patterns))))
+      return signalPassFailure();
 
-    // auto inti = llvm::APSInt(32, false);
+    auto inti = llvm::APSInt(32, false);
     auto i32_ty = IntegerType::get(mod->getContext(), 32);
 
     mod->setAttr(

@@ -412,11 +412,17 @@ translateOMPToLLVMIR(llvm::LLVMContext *llvmContext,
       /*printModuleScope=*/false,
       /*printAfterOnlyOnChange=*/true,
       /*printAfterOnlyOnFailure*/ false, llvm::dbgs(), printingFlags);
-
-  printf("before addPass\n");
+  
+  pm.addPass(mlir::createConvertSCFToCFPass());
+  pm.addPass(mlir::createConvertIndexToLLVMPass());
   pm.addPass(
       createConvertOMPToLLVMPass({computeCapability, &tmaInfos, target}));
-  printf("after addPass\n");
+  pm.addPass(createConvertCPUToLLVMPass());
+  pm.addPass(mlir::createArithToLLVMConversionPass());
+  pm.addPass(mlir::createCanonicalizerPass());
+  // Simplify the IR
+  pm.addPass(mlir::createCSEPass());
+  pm.addPass(mlir::createSymbolDCEPass());
 
   if (failed(pm.run(module))) {
     llvm::errs() << "Pass execution failed";

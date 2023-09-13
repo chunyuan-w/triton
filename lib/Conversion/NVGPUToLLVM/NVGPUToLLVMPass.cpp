@@ -1101,6 +1101,59 @@ public:
   }
 };
 
+
+class ConvertCPUToLLVM : public ConvertNVGPUToLLVMBase<ConvertCPUToLLVM> {
+
+public:
+  explicit ConvertCPUToLLVM() {}
+
+  void runOnOperation() override {
+    MLIRContext *context = &getContext();
+    ModuleOp mod = getOperation();
+    RewritePatternSet patterns(context);
+
+#define POPULATE_NVGPU_OP(SRC_OP, ASM)                                         \
+  patterns.add<NVGPUOpGenericPattern<SRC_OP>>(context, ASM, Constraints(),     \
+                                              Constraints());
+    POPULATE_NVGPU_OP(ttn::RegAllocOp, Reg_Alloc_Op)
+    POPULATE_NVGPU_OP(ttn::WGMMAFenceOp, Wgmma_Fence_Op)
+    POPULATE_NVGPU_OP(ttn::CGABarrierSyncOp, Cga_Barrier_Sync_op)
+    POPULATE_NVGPU_OP(ttn::WGMMACommitGroupOp, Wgmma_Commit_Group_Op)
+    POPULATE_NVGPU_OP(ttn::WGMMAWaitGroupOp, Wgmma_Wait_Group_Op)
+    POPULATE_NVGPU_OP(ttn::ClusterWaitOp, Cluster_Wait_Op)
+    POPULATE_NVGPU_OP(ttn::FenceMBarrierInitOp, Fence_Mbarrier_Init_Op)
+    POPULATE_NVGPU_OP(ttn::CGABarrierArriveOp, Cga_Barrier_Arrive_Op)
+    POPULATE_NVGPU_OP(ttn::CGABarrierWaitOp, Cga_Barrier_Wait_Op)
+    POPULATE_NVGPU_OP(ttn::RegDeallocOp, Reg_Dealloc_Op)
+#undef POPULATE_NVGPU_OP
+    patterns.add<NVGPUOpGenericPattern<ttn::MBarrierInitOp>>(
+        context, Mbarrier_Init_Op, Constraints(), Constraints({"r", "b"}));
+    patterns.add<NVGPUOpGenericPattern<ttn::MBarrierWaitOp>>(
+        context, Mbarrier_Wait_Op, Constraints(), Constraints({"r", "r"}));
+    patterns.add<NVGPUOpGenericPattern<ttn::NamedBarrierArriveOp>>(
+        context, Named_Barrier_Arrive_Op, Constraints(),
+        Constraints({"r", "r"}));
+    patterns.add<NVGPUOpGenericPattern<ttn::NamedBarrierWaitOp>>(
+        context, Named_Barrier_Wait_Op, Constraints(), Constraints({"r", "r"}));
+    patterns.add<NVGPUOpGenericPattern<ttn::Sts64Op>>(
+        context, Sts64_Op, Constraints(), Constraints({"r", "r", "r"}));
+    patterns.add<NVGPUOpGenericPattern<ttn::ClusterCTAIdOp>>(
+        context, Cluster_Cta_Id_Op, Constraints({"=r"}), Constraints());
+    patterns.add<NVGPUOpGenericPattern<ttn::WGMMADescCreateOp>>(
+        context, Wgmma_Desc_Create_op, Constraints({"=l"}),
+        Constraints({"l", "l"}));
+
+    patterns.add<FenceAsyncSharedOpPattern, StoreMatrixOpPattern,
+                 OffsetOfStmatrixV4OpPattern, MBarrierArriveOpPattern,
+                 ClusterArriveOpPattern, TMALoadTiledOpPattern,
+                 TMAStoreTiledOpPattern, LoadDSmemOpPattern, WGMMAOpPattern,
+                 StoreDSmemOpPattern, OffsetOfSts64OpPattern>(context);
+
+    if (applyPatternsAndFoldGreedily(mod, std::move(patterns)).failed())
+      signalPassFailure();
+  }
+};
+
 } // anonymous namespace
 
 namespace mlir {
@@ -1108,6 +1161,10 @@ namespace triton {
 
 std::unique_ptr<OperationPass<ModuleOp>> createConvertNVGPUToLLVMPass() {
   return std::make_unique<::ConvertNVGPUToLLVM>();
+}
+
+std::unique_ptr<OperationPass<ModuleOp>> createConvertCPUToLLVMPass() {
+  return std::make_unique<::ConvertCPUToLLVM>();
 }
 
 } // namespace triton
