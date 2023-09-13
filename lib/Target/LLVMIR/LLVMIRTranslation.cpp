@@ -386,6 +386,34 @@ translateTritonGPUToLLVMIR(llvm::LLVMContext *llvmContext,
   return llvmIR;
 }
 
+std::unique_ptr<llvm::Module>
+translateOMPToLLVMIR(llvm::LLVMContext *llvmContext,
+                           mlir::ModuleOp module, int computeCapability,
+                           mlir::triton::gpu::TMAMetadataTy &tmaInfos,
+                           Target target) {
+
+  mlir::PassManager pm(module->getContext());
+  mlir::registerPassManagerCLOptions();
+  if (failed(applyPassManagerCLOptions(pm))) {
+    llvm::errs() << "failed to apply pass manager CL options\n";
+    return nullptr;
+  }
+
+  if (failed(pm.run(module))) {
+    llvm::errs() << "Pass execution failed";
+    return nullptr;
+  }
+
+  auto llvmIR = translateLLVMToLLVMIR(llvmContext, module, target);
+  if (!llvmIR) {
+    llvm::errs() << "Translate to LLVM IR failed";
+    return nullptr;
+  }
+
+  return llvmIR;
+
+}
+
 void addExternalLibs(mlir::ModuleOp &module,
                      const std::vector<std::string> &names,
                      const std::vector<std::string> &paths) {

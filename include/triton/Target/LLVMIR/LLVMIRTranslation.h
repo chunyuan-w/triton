@@ -31,6 +31,13 @@ translateTritonGPUToLLVMIR(llvm::LLVMContext *llvmContext,
                            mlir::triton::gpu::TMAMetadataTy &tmaInfos,
                            Target target);
 
+// Translate OMP dialect to LLVMIR, return null if failed.
+std::unique_ptr<llvm::Module>
+translateOMPToLLVMIR(llvm::LLVMContext *llvmContext,
+                           mlir::ModuleOp module, int computeCapability,
+                           mlir::triton::gpu::TMAMetadataTy &tmaInfos,
+                           Target target);
+
 // Translate mlir LLVM dialect to LLVMIR, return null if failed.
 std::unique_ptr<llvm::Module>
 translateLLVMToLLVMIR(llvm::LLVMContext *llvmContext, mlir::ModuleOp module,

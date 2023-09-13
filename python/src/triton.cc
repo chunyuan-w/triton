@@ -1876,6 +1876,26 @@ void init_triton_translation(py::module &m) {
       ret::take_ownership);
 
   m.def(
+      "translate_omp_to_llvmir",
+      [](mlir::ModuleOp op, int computeCapability,
+         mlir::triton::gpu::TMAMetadataTy &tmaInfos,
+         mlir::triton::Target target) {
+        py::gil_scoped_release allow_threads;
+        llvm::LLVMContext llvmContext;
+        auto llvmModule = ::mlir::triton::translateOMPToLLVMIR(
+            &llvmContext, op, computeCapability, tmaInfos, target);
+        if (!llvmModule)
+          llvm::report_fatal_error("Failed to translate OMP to LLVM IR.");
+
+        std::string str;
+        llvm::raw_string_ostream os(str);
+        llvmModule->print(os, nullptr);
+        os.flush();
+        return str;
+      },
+      ret::take_ownership);
+
+  m.def(
       "translate_llvmir_to_ptx",
       [](const std::string llvmIR, int capability, int version) -> std::string {
         py::gil_scoped_release allow_threads;
