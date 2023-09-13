@@ -399,6 +399,25 @@ translateOMPToLLVMIR(llvm::LLVMContext *llvmContext,
     return nullptr;
   }
 
+  printf("before printingFlags\n");
+  auto printingFlags = mlir::OpPrintingFlags();
+  printingFlags.elideLargeElementsAttrs(16);
+  printingFlags.enableDebugInfo();
+  pm.enableIRPrinting(
+      /*shouldPrintBeforePass=*/nullptr,
+      /*shouldPrintAfterPass=*/
+      [](mlir::Pass *pass, mlir::Operation *) {
+        return ::triton::tools::getBoolEnv("MLIR_ENABLE_DUMP");
+      },
+      /*printModuleScope=*/false,
+      /*printAfterOnlyOnChange=*/true,
+      /*printAfterOnlyOnFailure*/ false, llvm::dbgs(), printingFlags);
+
+  printf("before addPass\n");
+  pm.addPass(
+      createConvertOMPToLLVMPass({computeCapability, &tmaInfos, target}));
+  printf("after addPass\n");
+
   if (failed(pm.run(module))) {
     llvm::errs() << "Pass execution failed";
     return nullptr;

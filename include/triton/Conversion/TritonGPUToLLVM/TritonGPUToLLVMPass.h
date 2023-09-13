@@ -23,6 +23,9 @@ std::unique_ptr<OperationPass<ModuleOp>> createConvertTritonGPUToLLVMPass();
 std::unique_ptr<OperationPass<ModuleOp>>
 createConvertTritonGPUToLLVMPass(const ConvertTritonGPUToLLVMOptions &options);
 
+// TODO (chunyuan): ConvertTritonGPUToLLVMOptions
+std::unique_ptr<OperationPass<ModuleOp>>
+createConvertOMPToLLVMPass(const ConvertTritonGPUToLLVMOptions &options);
 } // namespace triton
 
 } // namespace mlir

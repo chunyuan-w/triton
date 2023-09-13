@@ -861,6 +861,60 @@ private:
   }
 };
 
+struct ConvertOMPToLLVM
+    : public triton::impl::ConvertTritonGPUToLLVMBase<ConvertOMPToLLVM> {
+  using ConvertTritonGPUToLLVMBase<
+      ConvertOMPToLLVM>::ConvertTritonGPUToLLVMBase;
+
+  void runOnOperation() override {
+    printf("in cpu ConvertOMPToLLVM\n");
+    
+    MLIRContext *context = &getContext();
+    ModuleOp mod = getOperation();
+    mlir::LowerToLLVMOptions option(context);
+    option.overrideIndexBitwidth(32);
+    TritonGPUToLLVMTypeConverter typeConverter(context, option);
+    TritonLLVMConversionTarget convTarget(*context, target);
+    int numWarps = triton::gpu::TritonGPUDialect::getNumWarps(mod);
+    int numCTAs = triton::gpu::TritonGPUDialect::getNumCTAs(mod);
+    int threadsPerWarp = triton::gpu::TritonGPUDialect::getThreadsPerWarp(mod);
+
+    // Allocate shared memory and set barrier
+    ModuleAllocation allocation(mod);
+    ModuleMembarAnalysis membarPass(&allocation);
+    membarPass.run();
+
+
+    printf("before lower functions\n");
+
+    // Lower functions
+    {
+      mlir::LowerToLLVMOptions option(context);
+      TritonGPUToLLVMTypeConverter typeConverter(context, option);
+      TritonLLVMFunctionConversionTarget funcTarget(*context, target);
+      RewritePatternSet funcPatterns(context);
+      funcPatterns.add<FuncOpConversion>(typeConverter, numWarps, allocation,
+                                         /*benefit=*/1);
+      mlir::cf::populateControlFlowToLLVMConversionPatterns(typeConverter,
+                                                            funcPatterns);
+      if (failed(
+              applyPartialConversion(mod, funcTarget, std::move(funcPatterns))))
+        return signalPassFailure();
+    }
+
+
+    printf("after lower functions\n");
+
+
+
+
+
+  }
+
+};
+
+
+
 } // anonymous namespace
 
 namespace mlir {
@@ -872,6 +926,11 @@ std::unique_ptr<OperationPass<ModuleOp>> createConvertTritonGPUToLLVMPass() {
 std::unique_ptr<OperationPass<ModuleOp>>
 createConvertTritonGPUToLLVMPass(const ConvertTritonGPUToLLVMOptions &options) {
   return std::make_unique<ConvertTritonGPUToLLVM>(options);
+}
+
+std::unique_ptr<OperationPass<ModuleOp>>
+createConvertOMPToLLVMPass(const ConvertTritonGPUToLLVMOptions &options) {
+  return std::make_unique<ConvertOMPToLLVM>(options);
 }
 
 } // namespace triton

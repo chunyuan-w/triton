@@ -321,7 +321,7 @@ def get_arch_default_num_warps(device_type):
         num_warps = 4
     elif device_type in ["cpu"]:
         # TODO (chunyuan): which number on cpu?
-        num_warps = 1
+        num_warps = 4
     else:
         _device_backend = get_backend(device_type)
         assert _device_backend
