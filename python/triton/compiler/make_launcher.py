@@ -21,7 +21,7 @@ def make_so_cache_key(version_hash, signature, constants, ids, **kwargs):
     return key
 
 
-def make_stub(name, signature, constants, ids, **kwargs):
+def make_stub(name, signature, constants, ids, device_type, **kwargs):
     # name of files that are cached
     so_cache_key = make_so_cache_key(version_key(), signature, constants, ids, **kwargs)
     so_cache_manager = get_cache_manager(so_cache_key)
@@ -30,7 +30,9 @@ def make_stub(name, signature, constants, ids, **kwargs):
     cache_path = so_cache_manager.get_file(so_name)
     if cache_path is None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            src = generate_launcher(constants, signature, ids)
+            src = generate_launcher(constants, signature, ids, device_type)
+            print("src:")
+            print(src)
             src_path = os.path.join(tmpdir, "main.c")
             with open(src_path, "w") as f:
                 f.write(src)
@@ -43,9 +45,9 @@ def make_stub(name, signature, constants, ids, **kwargs):
 # ----- source code generation --------
 
 
-def ty_to_cpp(ty):
+def ty_to_cpp(ty, device_type):
     if ty[0] == '*':
-        return "hipDeviceptr_t" if is_hip() else "CUdeviceptr"
+        return "hipDeviceptr_t" if is_hip() else "void*" if device_type == "cpu" else "CUdeviceptr"
     return {
         "i1": "int32_t",
         "i8": "int8_t",
@@ -62,10 +64,10 @@ def ty_to_cpp(ty):
     }[ty]
 
 
-def generate_launcher(constants, signature, ids):
+def generate_launcher(constants, signature, ids, device_type):
     start_desc = len(signature)
     signature = generate_cu_signature(constants, signature, ids)
-    arg_decls = ', '.join(f"{ty_to_cpp(ty)} arg{i}" for i, ty in signature.items())
+    arg_decls = ', '.join(f"{ty_to_cpp(ty, device_type)} arg{i}" for i, ty in signature.items())
 
     def _extracted_type(ty):
         if ty[0] == '*':
@@ -253,6 +255,187 @@ static PyObject* launch(PyObject* self, PyObject* args) {{
   {"; ".join([f"DevicePtrInfo ptr_info{i} = getPointer(_arg{i}, {i}); if (!ptr_info{i}.valid) return NULL;" if ty[0] == "*" else "" for i, ty in signature.items()])};
   Py_BEGIN_ALLOW_THREADS;
   _launch(gridX, gridY, gridZ, num_warps, num_ctas, clusterDimX, clusterDimY, clusterDimZ, shared_memory, (CUstream)_stream, (CUfunction)_function{', ' + ', '.join(f"ptr_info{i}.dev_ptr" if ty[0]=="*" else f"_arg{i}"for i, ty in signature.items()) if len(signature) > 0 else ''});
+  Py_END_ALLOW_THREADS;
+
+  if (launch_exit_hook != Py_None && !PyObject_CallObject(launch_exit_hook, args)) {{
+    return NULL;
+  }}
+
+  // return None
+  Py_INCREF(Py_None);
+  return Py_None;
+}}
+
+static PyMethodDef ModuleMethods[] = {{
+  {{"launch", launch, METH_VARARGS, "Entry point for all kernels with this signature"}},
+  {{NULL, NULL, 0, NULL}} // sentinel
+}};
+
+static struct PyModuleDef ModuleDef = {{
+  PyModuleDef_HEAD_INIT,
+  \"__triton_launcher\",
+  NULL, //documentation
+  -1, //size
+  ModuleMethods
+}};
+
+PyMODINIT_FUNC PyInit___triton_launcher(void) {{
+  PyObject *m = PyModule_Create(&ModuleDef);
+  if(m == NULL) {{
+    return NULL;
+  }}
+  PyModule_AddFunctions(m, ModuleMethods);
+  return m;
+}}
+"""
+    if device_type == "cpu":
+      src = f"""
+#include \"cuda.h\"
+#include <stdbool.h>
+#include <Python.h>
+#include <dlfcn.h>
+
+static inline void gpuAssert(CUresult code, const char *file, int line)
+{{
+   if (code != CUDA_SUCCESS)
+   {{
+      const char* prefix = "Triton Error [CUDA]: ";
+      const char* str;
+      cuGetErrorString(code, &str);
+      char err[1024] = {{0}};
+      strcat(err, prefix);
+      strcat(err, str);
+      PyGILState_STATE gil_state;
+      gil_state = PyGILState_Ensure();
+      PyErr_SetString(PyExc_RuntimeError, err);
+      PyGILState_Release(gil_state);
+   }}
+}}
+
+#define CUDA_CHECK(ans) {{ gpuAssert((ans), __FILE__, __LINE__); }}
+
+typedef CUresult (*cuLaunchKernelEx_t)(const CUlaunchConfig* config, CUfunction f, void** kernelParams, void** extra);
+
+static cuLaunchKernelEx_t getLaunchKernelExHandle() {{
+  // Open the shared library
+  void* handle = dlopen("libcuda.so", RTLD_LAZY);
+  if (!handle) {{
+    PyErr_SetString(PyExc_RuntimeError, "Failed to open libcuda.so");
+    return NULL;
+  }}
+  // Clear any existing error
+  dlerror();
+  cuLaunchKernelEx_t cuLaunchKernelExHandle = (cuLaunchKernelEx_t)dlsym(handle, "cuLaunchKernelEx");
+  // Check for errors
+  const char *dlsym_error = dlerror();
+  if (dlsym_error) {{
+    PyErr_SetString(PyExc_RuntimeError, "Failed to retrieve cuLaunchKernelEx from libcuda.so");
+    return NULL;
+  }}
+  return cuLaunchKernelExHandle;
+}}
+
+static void _launch(int gridX, int gridY, int gridZ, int num_warps, int num_ctas, int clusterDimX, int clusterDimY, int clusterDimZ, int shared_memory, CUstream stream, CUfunction function{', ' + arg_decls if len(arg_decls) > 0 else ''}) {{
+  void *params[] = {{ {', '.join(f"&arg{i}" for i in params)} }};
+  if (gridX*gridY*gridZ > 0) {{
+    if (num_ctas == 1) {{
+      printf("enter _launch ctas 1");
+      CUDA_CHECK(cuLaunchKernel(function, gridX, gridY, gridZ, 32*num_warps, 1, 1, shared_memory, stream, params, 0));
+    }} else {{
+      printf("enter _launch else");
+      CUlaunchAttribute launchAttr[2];
+      launchAttr[0].id = CU_LAUNCH_ATTRIBUTE_CLUSTER_DIMENSION;
+      launchAttr[0].value.clusterDim.x = clusterDimX;
+      launchAttr[0].value.clusterDim.y = clusterDimY;
+      launchAttr[0].value.clusterDim.z = clusterDimZ;
+      launchAttr[1].id = CU_LAUNCH_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE;
+      launchAttr[1].value.clusterSchedulingPolicyPreference = CU_CLUSTER_SCHEDULING_POLICY_SPREAD;
+      CUlaunchConfig config;
+      config.gridDimX = gridX * clusterDimX;
+      config.gridDimY = gridY * clusterDimY;
+      config.gridDimZ = gridZ * clusterDimZ;
+      config.blockDimX = 32 * num_warps;
+      config.blockDimY = 1;
+      config.blockDimZ = 1;
+      config.sharedMemBytes = shared_memory;
+      config.hStream = stream;
+      config.attrs = launchAttr;
+      config.numAttrs = 2;
+      static cuLaunchKernelEx_t cuLaunchKernelExHandle = NULL;
+      if (cuLaunchKernelExHandle == NULL) {{
+        cuLaunchKernelExHandle = getLaunchKernelExHandle();
+      }}
+      CUDA_CHECK(cuLaunchKernelExHandle(&config, function, params, 0));
+    }}
+  }}
+}}
+
+typedef struct _DevicePtrInfo {{
+    CUdeviceptr dev_ptr;
+    bool valid;
+}} DevicePtrInfo;
+
+
+static inline void* getPointer(PyObject *obj, int idx) {{
+  printf("enter PyLong_Check");
+  if (PyLong_Check(obj)) {{
+    auto ptrValue = PyLong_AsVoidPtr(obj);
+    if (PyErr_Occurred()) {{
+      PyErr_Print();
+    }}
+    printf("enter return 1");
+    return (void*)ptrValue;
+  }}
+  if (obj == Py_None) {{
+    printf("enter return 2");
+    return (void*)0;
+  }}
+  PyObject *ptr = PyObject_GetAttrString(obj, "data_ptr");
+  if (ptr) {{
+    PyObject *empty_tuple = PyTuple_New(0);
+    PyObject *ret = PyObject_Call(ptr, empty_tuple, NULL);
+    Py_DECREF(empty_tuple);
+    Py_DECREF(ptr);
+    if (!PyLong_Check(ret)) {{
+      PyErr_SetString(PyExc_TypeError, "data_ptr method of Pointer object must return 64-bit int");
+    }}
+    printf("enter return 3");
+    return (void*)PyLong_AsVoidPtr(ret);
+  }}
+  PyErr_SetString(PyExc_TypeError, "Pointer argument must be either uint64 or have data_ptr method");
+  printf("enter return 4");
+  return (void*)0;
+}}
+
+
+static PyObject* launch(PyObject* self, PyObject* args) {{
+  printf("enter launch func");
+  int gridX, gridY, gridZ;
+  uint64_t _stream;
+  uint64_t _function;
+  int num_warps;
+  int num_ctas;
+  int clusterDimX;
+  int clusterDimY;
+  int clusterDimZ;
+  int shared_memory;
+  PyObject *launch_enter_hook = NULL;
+  PyObject *launch_exit_hook = NULL;
+  PyObject *compiled_kernel = NULL;
+  {' '.join([f"{_extracted_type(ty)} _arg{i}; " for i, ty in signature.items()])}
+  if(!PyArg_ParseTuple(args, \"{format}\", &gridX, &gridY, &gridZ, &num_warps, &num_ctas, &clusterDimX, &clusterDimY, &clusterDimZ, &shared_memory, &_stream, &_function, &launch_enter_hook, &launch_exit_hook, &compiled_kernel{', ' + ', '.join(f"&_arg{i}" for i, ty in signature.items()) if len(signature) > 0 else ''})) {{
+    return NULL;
+  }}
+
+  if (launch_enter_hook != Py_None && !PyObject_CallObject(launch_enter_hook, args)) {{
+    return NULL;
+  }}
+
+
+  // raise exception asap
+  {"; ".join([f"void* ptr_info{i} = getPointer(_arg{i}, {i}); if (!ptr_info{i}) return NULL;" if ty[0] == "*" else "" for i, ty in signature.items()])};
+  Py_BEGIN_ALLOW_THREADS;
+  _launch(gridX, gridY, gridZ, num_warps, num_ctas, clusterDimX, clusterDimY, clusterDimZ, shared_memory, (CUstream)_stream, (CUfunction)_function{', ' + ', '.join(f"ptr_info{i}" if ty[0]=="*" else f"_arg{i}"for i, ty in signature.items()) if len(signature) > 0 else ''});
   Py_END_ALLOW_THREADS;
 
   if (launch_exit_hook != Py_None && !PyObject_CallObject(launch_exit_hook, args)) {{

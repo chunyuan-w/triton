@@ -356,6 +356,16 @@ def add_cuda_stages(arch, extern_libs, stages):
                        lambda src: ptx_to_cubin(src, arch))
 
 
+def add_cpu_stages(arch, extern_libs, stages):
+    
+    stages["ptx"] = (lambda path: Path(path).read_text(),
+                     lambda src: llir_to_ptx(src, arch))
+    # TODO (chunyuan): ptx to cpu .so?
+    stages["cubin"] = (lambda path: Path(path).read_bytes(),
+                       lambda src: ptx_to_cubin(src, arch))    
+
+
+
 def compile(fn, **kwargs):
     # Get device type to decide which backend should be used
     device_type = kwargs.get("device_type", "cuda")
@@ -425,6 +435,7 @@ def compile(fn, **kwargs):
                            lambda src: ttir_to_ompir(src, num_warps, num_ctas, arch))
         stages["llir"] = (lambda path: Path(path).read_text(),
                           lambda src: ompir_to_llir(src, extern_libs, arch, tma_infos))    
+        add_cpu_stages(arch, extern_libs, stages)
     elif device_type == "xpu":
         stages["ttgir"] = (lambda path: parse_mlir_module(path, context),
                            lambda src: optimize_ttgir(ttir_to_ttgir(src, num_warps, num_ctas, arch), num_stages, num_warps, num_ctas, arch, cluster_info, enable_warp_specialization, enable_persistent, optimize_epilogue))
@@ -593,7 +604,7 @@ def compile(fn, **kwargs):
     # cache manager
     # TODO (chunyuan) skip for cpu for now
     if is_cuda or device_type == "cpu":
-        so_path = make_stub(name, signature, constants, ids, enable_warp_specialization=enable_warp_specialization)
+        so_path = make_stub(name, signature, constants, ids, device_type, enable_warp_specialization=enable_warp_specialization)
     else:
         so_path = _device_backend.make_launcher_stub(name, signature, constants, ids)
     # write-back metadata, if it didn't come from the cache
@@ -652,6 +663,16 @@ class CompiledKernel:
             }[driver.backend]
             max_shared = driver.utils.get_device_properties(device)["max_shared_mem"]
             fn_load_binary = driver.utils.load_binary
+        elif self.device_type in ["cpu"]:
+            device = get_current_device()
+            bin_path = {
+                driver.HIP: "hsaco_path",
+                driver.CUDA: "cubin"
+            }[driver.backend]
+            # TODO (chunyuan): .so for CPU?
+            # bin_path = "so"
+            max_shared = driver.utils.get_device_properties(device)["max_shared_mem"]
+            fn_load_binary = driver.utils.load_binary            
         else:
             assert self.device_backend
             device = self.device_backend.get_current_device()

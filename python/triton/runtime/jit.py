@@ -399,7 +399,8 @@ def {self.fn.__name__}({args_signature}grid=None, num_warps=None, num_ctas=1, nu
         if device_type in ['cuda']:
             stream = get_cuda_stream(device)
         elif device_type in ['cpu']:
-            stream = None
+            # stream = None
+            stream = 1
         else:
             stream = device_backend.get_stream()
 
