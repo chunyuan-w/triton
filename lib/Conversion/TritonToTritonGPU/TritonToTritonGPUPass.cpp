@@ -984,14 +984,14 @@ public:
     // rewrite patterns
     RewritePatternSet patterns(context);
     // add rules
-    populateStdPatternsAndLegality(typeConverter, patterns, target);
+    // populateStdPatternsAndLegality(typeConverter, patterns, target);
     populateArithPatternsAndLegality(typeConverter, patterns, target);
     populateMathPatternsAndLegality(typeConverter, patterns, target);
     populateTritonPatterns(typeConverter, patterns, numCTAs);
     // TODO: can we use
     //    mlir::scf::populateSCFStructurealTypeConversionsAndLegality(...) here?
-    populateSCFPatterns(typeConverter, patterns);
-    populateCFPatterns(typeConverter, patterns);
+    // populateSCFPatterns(typeConverter, patterns);
+    // populateCFPatterns(typeConverter, patterns);
 
     if (failed(applyPartialConversion(mod, target, std::move(patterns))))
       return signalPassFailure();
