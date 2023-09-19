@@ -41,18 +41,19 @@ def add_kernel(
     # # Note that offsets is a list of pointers:
     # block_start = pid * BLOCK_SIZE
     # offsets = block_start + tl.arange(0, BLOCK_SIZE)
-    offsets = tl.arange(0, BLOCK_SIZE)
+    # offsets = tl.arange(0, BLOCK_SIZE)
     # # Create a mask to guard memory operations against out-of-bounds accesses.
     # mask = offsets < n_elements
     # # Load x and y from DRAM, masking out any extra elements in case the input is not a
     # # multiple of the block size.
     # x = tl.load(x_ptr + offsets, mask=mask)
-    x = tl.load(x_ptr + offsets)
+    # x = tl.load(x_ptr + offsets)
     # y = tl.load(y_ptr + offsets, mask=mask)
     # output = x + y
     # # Write x + y back to DRAM.
     # tl.store(output_ptr + offsets, output, mask=mask)
-    tl.store(output_ptr + offsets, x)
+    # tl.store(output_ptr + offsets, x)
+    print("hello")
     return
 
 
@@ -93,12 +94,12 @@ x_ref = copy.deepcopy(x)
 y = torch.rand(size, device=device)
 output_torch = x + y
 output_triton = add(x, y)
-print(x_ref)
+print(output_torch)
 print(output_triton)
-print(
-    f'The maximum difference between torch and triton is '
-    f'{torch.max(torch.abs(x_ref - output_triton))}'
-)
+# print(
+#     f'The maximum difference between torch and triton is '
+#     f'{torch.max(torch.abs(x_ref - output_triton))}'
+# )
 
 # %%
 # Seems like we're good to go!
