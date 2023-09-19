@@ -1004,32 +1004,35 @@ struct ConvertOMPToLLVM
 
     populatePatterns1(populateTritonGPUToLLVMPatterns);
     populatePatterns1(populateConvertLayoutOpToLLVMPatterns);
-    populatePatterns2(populateDotOpToLLVMPatterns);
+    // populatePatterns2(populateDotOpToLLVMPatterns);
     populatePatterns4(populateElementwiseOpToLLVMPatterns);
-    populatePatterns3(populateLoadStoreOpToLLVMPatterns);
-    populatePatterns4(populateReduceOpToLLVMPatterns);
-    populatePatterns1(populateScanOpToLLVMPatterns);
+    populatePatterns3(populateCpuLoadStoreOpToLLVMPatterns);
+    // populatePatterns4(populateReduceOpToLLVMPatterns);
+    // populatePatterns1(populateScanOpToLLVMPatterns);
     populatePatterns2(populateViewOpToLLVMPatterns);
-    populatePatterns2(populateBarrierOpToLLVMPatterns);
+    // populatePatterns2(populateBarrierOpToLLVMPatterns);
     populatePatterns2(populateTensorPtrOpsToLLVMPatterns);
-    populatePatterns2(populateClusterOpsToLLVMPatterns);
-    populatePatterns2(populateRegReallocOpToLLVMPatterns);
+    // populatePatterns2(populateClusterOpsToLLVMPatterns);
+    // populatePatterns2(populateRegReallocOpToLLVMPatterns);
 
     // TODO(thomas): this should probably be done in a separate step to not
     // interfere with our own lowering of arith ops. Add arith/math's patterns
     // to help convert scalar expression to LLVM.
-    mlir::arith::populateArithToLLVMConversionPatterns(typeConverter, patterns);
-    mlir::populateMathToLLVMConversionPatterns(typeConverter, patterns);
+    // mlir::arith::populateArithToLLVMConversionPatterns(typeConverter, patterns);
+    // mlir::populateMathToLLVMConversionPatterns(typeConverter, patterns);
     
     // TODO (chunyuan): 0913: GPU specific pass!!!
-    mlir::populateGpuToNVVMConversionPatterns(typeConverter, patterns);
+    // mlir::populateGpuToNVVMConversionPatterns(typeConverter, patterns);
 
-    mlir::cf::populateControlFlowToLLVMConversionPatterns(typeConverter,
-                                                          patterns);
+    // mlir::cf::populateControlFlowToLLVMConversionPatterns(typeConverter,
+    //                                                       patterns);
     
     // TODO (chunyuan): this is where the pass works
-    if (failed(applyPartialConversion(mod, convTarget, std::move(patterns))))
+    if (failed(applyPartialConversion(mod, convTarget, std::move(patterns)))) {
+      printf("signalPassFailure 11\n");
       return signalPassFailure();
+    }
+
 
   }
 
