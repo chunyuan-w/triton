@@ -47,13 +47,13 @@ def add_kernel(
     # # Load x and y from DRAM, masking out any extra elements in case the input is not a
     # # multiple of the block size.
     # x = tl.load(x_ptr + offsets, mask=mask)
-    # x = tl.load(x_ptr + offsets)
+    x = tl.load(x_ptr)
     # y = tl.load(y_ptr + offsets, mask=mask)
     # output = x + y
     # # Write x + y back to DRAM.
     # tl.store(output_ptr + offsets, output, mask=mask)
-    # tl.store(output_ptr + offsets, x)
-    print("hello")
+    tl.store(output_ptr, x)
+    # print("hello")
     return
 
 
@@ -92,14 +92,14 @@ size = 1
 x = torch.rand(size, device=device)
 x_ref = copy.deepcopy(x)
 y = torch.rand(size, device=device)
-output_torch = x + y
+output_torch = x
 output_triton = add(x, y)
 print(output_torch)
 print(output_triton)
-# print(
-#     f'The maximum difference between torch and triton is '
-#     f'{torch.max(torch.abs(x_ref - output_triton))}'
-# )
+print(
+    f'The maximum difference between torch and triton is '
+    f'{torch.max(torch.abs(x_ref - output_triton))}'
+)
 
 # %%
 # Seems like we're good to go!

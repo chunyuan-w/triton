@@ -1,0 +1,420 @@
+tpms_base=2.394350
+__kmp_ticks_per_msec=2394349
+__kmp_ticks_per_usec=2394
+__kmp_ticks_per_nsec=2
+enter cpu
+cpu included in key gen
+cache_dir: /home/chunyuan/.triton/cache
+self.key: 11751393e59633ef51576130578d9f57
+// -----// IR Dump Before Inliner (inline) ('builtin.module' operation) //----- //
+#loc = loc("tutorials/01-vector-add.py":28:0)
+module {
+  tt.func public @add_kernel_0d1d2c(%arg0: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0), %arg1: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0)) attributes {noinline = false} {
+    %0 = tt.load %arg0 {cache = 1 : i32, evict = 1 : i32, isVolatile = false} : f32 loc(#loc1)
+    tt.store %arg1, %0 {cache = 1 : i32, evict = 1 : i32} : f32 loc(#loc2)
+    tt.return loc(#loc3)
+  } loc(#loc)
+} loc(#loc)
+#loc1 = loc("tutorials/01-vector-add.py":50:16)
+#loc2 = loc("tutorials/01-vector-add.py":55:25)
+#loc3 = loc("tutorials/01-vector-add.py":57:4)
+
+
+// -----// IR Dump Before Canonicalizer (canonicalize) ('tt.func' operation: @add_kernel_0d1d2c) //----- //
+#loc = loc("tutorials/01-vector-add.py":28:0)
+module {
+  tt.func public @add_kernel_0d1d2c(%arg0: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0), %arg1: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0)) attributes {noinline = false} {
+    %0 = tt.load %arg0 {cache = 1 : i32, evict = 1 : i32, isVolatile = false} : f32 loc(#loc1)
+    tt.store %arg1, %0 {cache = 1 : i32, evict = 1 : i32} : f32 loc(#loc2)
+    tt.return loc(#loc3)
+  } loc(#loc)
+} loc(#loc)
+#loc1 = loc("tutorials/01-vector-add.py":50:16)
+#loc2 = loc("tutorials/01-vector-add.py":55:25)
+#loc3 = loc("tutorials/01-vector-add.py":57:4)
+
+
+// -----// IR Dump Before TritonRewriteTensorPointer (triton-rewrite-tensor-pointer) ('builtin.module' operation) //----- //
+#loc = loc("tutorials/01-vector-add.py":28:0)
+module {
+  tt.func public @add_kernel_0d1d2c(%arg0: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0), %arg1: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0)) attributes {noinline = false} {
+    %0 = tt.load %arg0 {cache = 1 : i32, evict = 1 : i32, isVolatile = false} : f32 loc(#loc1)
+    tt.store %arg1, %0 {cache = 1 : i32, evict = 1 : i32} : f32 loc(#loc2)
+    tt.return loc(#loc3)
+  } loc(#loc)
+} loc(#loc)
+#loc1 = loc("tutorials/01-vector-add.py":50:16)
+#loc2 = loc("tutorials/01-vector-add.py":55:25)
+#loc3 = loc("tutorials/01-vector-add.py":57:4)
+
+
+// -----// IR Dump Before Inliner (inline) ('builtin.module' operation) //----- //
+#loc = loc("tutorials/01-vector-add.py":28:0)
+module {
+  tt.func public @add_kernel_0d1d2c(%arg0: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0), %arg1: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0)) attributes {noinline = false} {
+    %0 = tt.load %arg0 {cache = 1 : i32, evict = 1 : i32, isVolatile = false} : f32 loc(#loc1)
+    tt.store %arg1, %0 {cache = 1 : i32, evict = 1 : i32} : f32 loc(#loc2)
+    tt.return loc(#loc3)
+  } loc(#loc)
+} loc(#loc)
+#loc1 = loc("tutorials/01-vector-add.py":50:16)
+#loc2 = loc("tutorials/01-vector-add.py":55:25)
+#loc3 = loc("tutorials/01-vector-add.py":57:4)
+
+
+// -----// IR Dump Before Canonicalizer (canonicalize) ('tt.func' operation: @add_kernel_0d1d2c) //----- //
+#loc = loc("tutorials/01-vector-add.py":28:0)
+module {
+  tt.func public @add_kernel_0d1d2c(%arg0: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0), %arg1: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0)) attributes {noinline = false} {
+    %0 = tt.load %arg0 {cache = 1 : i32, evict = 1 : i32, isVolatile = false} : f32 loc(#loc1)
+    tt.store %arg1, %0 {cache = 1 : i32, evict = 1 : i32} : f32 loc(#loc2)
+    tt.return loc(#loc3)
+  } loc(#loc)
+} loc(#loc)
+#loc1 = loc("tutorials/01-vector-add.py":50:16)
+#loc2 = loc("tutorials/01-vector-add.py":55:25)
+#loc3 = loc("tutorials/01-vector-add.py":57:4)
+
+
+// -----// IR Dump Before TritonCombineOps (triton-combine) ('builtin.module' operation) //----- //
+#loc = loc("tutorials/01-vector-add.py":28:0)
+module {
+  tt.func public @add_kernel_0d1d2c(%arg0: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0), %arg1: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0)) attributes {noinline = false} {
+    %0 = tt.load %arg0 {cache = 1 : i32, evict = 1 : i32, isVolatile = false} : f32 loc(#loc1)
+    tt.store %arg1, %0 {cache = 1 : i32, evict = 1 : i32} : f32 loc(#loc2)
+    tt.return loc(#loc3)
+  } loc(#loc)
+} loc(#loc)
+#loc1 = loc("tutorials/01-vector-add.py":50:16)
+#loc2 = loc("tutorials/01-vector-add.py":55:25)
+#loc3 = loc("tutorials/01-vector-add.py":57:4)
+
+
+// -----// IR Dump Before Canonicalizer (canonicalize) ('builtin.module' operation) //----- //
+#loc = loc("tutorials/01-vector-add.py":28:0)
+module {
+  tt.func public @add_kernel_0d1d2c(%arg0: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0), %arg1: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0)) attributes {noinline = false} {
+    %0 = tt.load %arg0 {cache = 1 : i32, evict = 1 : i32, isVolatile = false} : f32 loc(#loc1)
+    tt.store %arg1, %0 {cache = 1 : i32, evict = 1 : i32} : f32 loc(#loc2)
+    tt.return loc(#loc3)
+  } loc(#loc)
+} loc(#loc)
+#loc1 = loc("tutorials/01-vector-add.py":50:16)
+#loc2 = loc("tutorials/01-vector-add.py":55:25)
+#loc3 = loc("tutorials/01-vector-add.py":57:4)
+
+
+// -----// IR Dump Before TritonReorderBroadcast (triton-reorder-broadcast) ('builtin.module' operation) //----- //
+#loc = loc("tutorials/01-vector-add.py":28:0)
+module {
+  tt.func public @add_kernel_0d1d2c(%arg0: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0), %arg1: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0)) attributes {noinline = false} {
+    %0 = tt.load %arg0 {cache = 1 : i32, evict = 1 : i32, isVolatile = false} : f32 loc(#loc1)
+    tt.store %arg1, %0 {cache = 1 : i32, evict = 1 : i32} : f32 loc(#loc2)
+    tt.return loc(#loc3)
+  } loc(#loc)
+} loc(#loc)
+#loc1 = loc("tutorials/01-vector-add.py":50:16)
+#loc2 = loc("tutorials/01-vector-add.py":55:25)
+#loc3 = loc("tutorials/01-vector-add.py":57:4)
+
+
+// -----// IR Dump Before CSE (cse) ('builtin.module' operation) //----- //
+#loc = loc("tutorials/01-vector-add.py":28:0)
+module {
+  tt.func public @add_kernel_0d1d2c(%arg0: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0), %arg1: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0)) attributes {noinline = false} {
+    %0 = tt.load %arg0 {cache = 1 : i32, evict = 1 : i32, isVolatile = false} : f32 loc(#loc1)
+    tt.store %arg1, %0 {cache = 1 : i32, evict = 1 : i32} : f32 loc(#loc2)
+    tt.return loc(#loc3)
+  } loc(#loc)
+} loc(#loc)
+#loc1 = loc("tutorials/01-vector-add.py":50:16)
+#loc2 = loc("tutorials/01-vector-add.py":55:25)
+#loc3 = loc("tutorials/01-vector-add.py":57:4)
+
+
+// -----// IR Dump Before LoopInvariantCodeMotion (loop-invariant-code-motion) ('builtin.module' operation) //----- //
+#loc = loc("tutorials/01-vector-add.py":28:0)
+module {
+  tt.func public @add_kernel_0d1d2c(%arg0: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0), %arg1: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0)) attributes {noinline = false} {
+    %0 = tt.load %arg0 {cache = 1 : i32, evict = 1 : i32, isVolatile = false} : f32 loc(#loc1)
+    tt.store %arg1, %0 {cache = 1 : i32, evict = 1 : i32} : f32 loc(#loc2)
+    tt.return loc(#loc3)
+  } loc(#loc)
+} loc(#loc)
+#loc1 = loc("tutorials/01-vector-add.py":50:16)
+#loc2 = loc("tutorials/01-vector-add.py":55:25)
+#loc3 = loc("tutorials/01-vector-add.py":57:4)
+
+
+// -----// IR Dump Before SymbolDCE (symbol-dce) ('builtin.module' operation) //----- //
+#loc = loc("tutorials/01-vector-add.py":28:0)
+module {
+  tt.func public @add_kernel_0d1d2c(%arg0: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0), %arg1: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0)) attributes {noinline = false} {
+    %0 = tt.load %arg0 {cache = 1 : i32, evict = 1 : i32, isVolatile = false} : f32 loc(#loc1)
+    tt.store %arg1, %0 {cache = 1 : i32, evict = 1 : i32} : f32 loc(#loc2)
+    tt.return loc(#loc3)
+  } loc(#loc)
+} loc(#loc)
+#loc1 = loc("tutorials/01-vector-add.py":50:16)
+#loc2 = loc("tutorials/01-vector-add.py":55:25)
+#loc3 = loc("tutorials/01-vector-add.py":57:4)
+
+
+// -----// IR Dump Before ConvertTritonToTritonGPU (convert-triton-to-tritongpu) ('builtin.module' operation) //----- //
+#loc = loc("tutorials/01-vector-add.py":28:0)
+module {
+  tt.func public @add_kernel_0d1d2c(%arg0: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0), %arg1: !tt.ptr<f32, 1> {tt.divisibility = 16 : i32} loc("tutorials/01-vector-add.py":28:0)) attributes {noinline = false} {
+    %0 = tt.load %arg0 {cache = 1 : i32, evict = 1 : i32, isVolatile = false} : f32 loc(#loc1)
+    tt.store %arg1, %0 {cache = 1 : i32, evict = 1 : i32} : f32 loc(#loc2)
+    tt.return loc(#loc3)
+  } loc(#loc)
+} loc(#loc)
+#loc1 = loc("tutorials/01-vector-add.py":50:16)
+#loc2 = loc("tutorials/01-vector-add.py":55:25)
+#loc3 = loc("tutorials/01-vector-add.py":57:4)
+
+
+in ConvertTritonToOmp runOnOperation
+before printingFlags
+in cpu ConvertOMPToLLVM
+before tensorPtrMap
+before lower functions
+after lower functions
+after initSharedMemory
+after convert_call_and_ret_ops
+enter CPU load
+// -----// IR Dump After ConvertTritonGPUToLLVM (convert-triton-gpu-to-llvm) //----- //
+#loc1 = loc(unknown)
+module attributes {"triton_gpu.num-ctas" = 1 : i32, "triton_gpu.num-warps" = 4 : i32, triton_gpu.shared = 0 : i32} {
+  llvm.mlir.global external @global_smem() {addr_space = 3 : i32} : !llvm.array<0 x i8> loc(#loc)
+  llvm.func @add_kernel_0d1d2c(%arg0: !llvm.ptr<f32, 1> {tt.divisibility = 16 : i32} loc(unknown), %arg1: !llvm.ptr<f32, 1> {tt.divisibility = 16 : i32} loc(unknown)) attributes {noinline = false, nvvm.kernel = 1 : ui1, nvvm.maxntid = [128 : i32], sym_visibility = "public", "triton_gpu.num-tma-load" = 0 : i32, "triton_gpu.num-tma-store" = 0 : i32} {
+    %0 = llvm.mlir.addressof @global_smem : !llvm.ptr<array<0 x i8>, 3> loc(#loc)
+    %1 = llvm.bitcast %0 : !llvm.ptr<array<0 x i8>, 3> to !llvm.ptr<i8, 3> loc(#loc)
+    %2 = builtin.unrealized_conversion_cast %arg1 : !llvm.ptr<f32, 1> to !tt.ptr<f32, 1> loc(#loc)
+    %3 = builtin.unrealized_conversion_cast %arg0 : !llvm.ptr<f32, 1> to !tt.ptr<f32, 1> loc(#loc)
+    %4 = llvm.load %arg0 : !llvm.ptr<f32, 1> loc(#loc2)
+    llvm.store %4, %arg1 : !llvm.ptr<f32, 1> loc(#loc3)
+    llvm.return loc(#loc4)
+  } loc(#loc)
+} loc(#loc)
+#loc = loc("tutorials/01-vector-add.py":28:0)
+#loc2 = loc("tutorials/01-vector-add.py":50:16)
+#loc3 = loc("tutorials/01-vector-add.py":55:25)
+#loc4 = loc("tutorials/01-vector-add.py":57:4)
+
+
+// -----// IR Dump After ConvertNVGPUToLLVM (convert-nv-gpu-to-llvm) //----- //
+#loc1 = loc(unknown)
+module attributes {"triton_gpu.num-ctas" = 1 : i32, "triton_gpu.num-warps" = 4 : i32, triton_gpu.shared = 0 : i32} {
+  llvm.mlir.global external @global_smem() {addr_space = 3 : i32} : !llvm.array<0 x i8> loc(#loc)
+  llvm.func @add_kernel_0d1d2c(%arg0: !llvm.ptr<f32, 1> {tt.divisibility = 16 : i32} loc(unknown), %arg1: !llvm.ptr<f32, 1> {tt.divisibility = 16 : i32} loc(unknown)) attributes {noinline = false, nvvm.kernel = 1 : ui1, nvvm.maxntid = [128 : i32], sym_visibility = "public", "triton_gpu.num-tma-load" = 0 : i32, "triton_gpu.num-tma-store" = 0 : i32} {
+    %0 = llvm.load %arg0 : !llvm.ptr<f32, 1> loc(#loc2)
+    llvm.store %0, %arg1 : !llvm.ptr<f32, 1> loc(#loc3)
+    llvm.return loc(#loc4)
+  } loc(#loc)
+} loc(#loc)
+#loc = loc("tutorials/01-vector-add.py":28:0)
+#loc2 = loc("tutorials/01-vector-add.py":50:16)
+#loc3 = loc("tutorials/01-vector-add.py":55:25)
+#loc4 = loc("tutorials/01-vector-add.py":57:4)
+
+
+cache_dir: /home/chunyuan/.triton/cache
+self.key: db77340a1798db4ae884f5dbc7d94a50
+src:
+
+#include "cuda.h"
+#include <stdbool.h>
+#include <Python.h>
+#include <dlfcn.h>
+
+static inline void gpuAssert(CUresult code, const char *file, int line)
+{
+   if (code != CUDA_SUCCESS)
+   {
+      const char* prefix = "Triton Error [CUDA]: ";
+      const char* str;
+      cuGetErrorString(code, &str);
+      char err[1024] = {0};
+      strcat(err, prefix);
+      strcat(err, str);
+      PyGILState_STATE gil_state;
+      gil_state = PyGILState_Ensure();
+      PyErr_SetString(PyExc_RuntimeError, err);
+      PyGILState_Release(gil_state);
+   }
+}
+
+#define CUDA_CHECK(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+
+typedef CUresult (*cuLaunchKernelEx_t)(const CUlaunchConfig* config, CUfunction f, void** kernelParams, void** extra);
+
+static cuLaunchKernelEx_t getLaunchKernelExHandle() {
+  // Open the shared library
+  void* handle = dlopen("libcuda.so", RTLD_LAZY);
+  if (!handle) {
+    PyErr_SetString(PyExc_RuntimeError, "Failed to open libcuda.so");
+    return NULL;
+  }
+  // Clear any existing error
+  dlerror();
+  cuLaunchKernelEx_t cuLaunchKernelExHandle = (cuLaunchKernelEx_t)dlsym(handle, "cuLaunchKernelEx");
+  // Check for errors
+  const char *dlsym_error = dlerror();
+  if (dlsym_error) {
+    PyErr_SetString(PyExc_RuntimeError, "Failed to retrieve cuLaunchKernelEx from libcuda.so");
+    return NULL;
+  }
+  return cuLaunchKernelExHandle;
+}
+
+static void _launch(int gridX, int gridY, int gridZ, int num_warps, int num_ctas, int clusterDimX, int clusterDimY, int clusterDimZ, int shared_memory, CUstream stream, CUfunction function, void* arg0, void* arg1, int32_t arg2) {
+  void *params[] = { &arg0, &arg1 };
+  if (gridX*gridY*gridZ > 0) {
+    if (num_ctas == 1) {
+      printf("enter _launch ctas 1");
+      CUDA_CHECK(cuLaunchKernel(function, gridX, gridY, gridZ, 32*num_warps, 1, 1, shared_memory, stream, params, 0));
+    } else {
+      printf("enter _launch else");
+      CUlaunchAttribute launchAttr[2];
+      launchAttr[0].id = CU_LAUNCH_ATTRIBUTE_CLUSTER_DIMENSION;
+      launchAttr[0].value.clusterDim.x = clusterDimX;
+      launchAttr[0].value.clusterDim.y = clusterDimY;
+      launchAttr[0].value.clusterDim.z = clusterDimZ;
+      launchAttr[1].id = CU_LAUNCH_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE;
+      launchAttr[1].value.clusterSchedulingPolicyPreference = CU_CLUSTER_SCHEDULING_POLICY_SPREAD;
+      CUlaunchConfig config;
+      config.gridDimX = gridX * clusterDimX;
+      config.gridDimY = gridY * clusterDimY;
+      config.gridDimZ = gridZ * clusterDimZ;
+      config.blockDimX = 32 * num_warps;
+      config.blockDimY = 1;
+      config.blockDimZ = 1;
+      config.sharedMemBytes = shared_memory;
+      config.hStream = stream;
+      config.attrs = launchAttr;
+      config.numAttrs = 2;
+      static cuLaunchKernelEx_t cuLaunchKernelExHandle = NULL;
+      if (cuLaunchKernelExHandle == NULL) {
+        cuLaunchKernelExHandle = getLaunchKernelExHandle();
+      }
+      CUDA_CHECK(cuLaunchKernelExHandle(&config, function, params, 0));
+    }
+  }
+}
+
+typedef struct _DevicePtrInfo {
+    CUdeviceptr dev_ptr;
+    bool valid;
+} DevicePtrInfo;
+
+
+static inline void* getPointer(PyObject *obj, int idx) {
+  printf("enter PyLong_Check");
+  if (PyLong_Check(obj)) {
+    auto ptrValue = PyLong_AsVoidPtr(obj);
+    if (PyErr_Occurred()) {
+      PyErr_Print();
+    }
+    printf("enter return 1");
+    return (void*)ptrValue;
+  }
+  if (obj == Py_None) {
+    printf("enter return 2");
+    return (void*)0;
+  }
+  PyObject *ptr = PyObject_GetAttrString(obj, "data_ptr");
+  if (ptr) {
+    PyObject *empty_tuple = PyTuple_New(0);
+    PyObject *ret = PyObject_Call(ptr, empty_tuple, NULL);
+    Py_DECREF(empty_tuple);
+    Py_DECREF(ptr);
+    if (!PyLong_Check(ret)) {
+      PyErr_SetString(PyExc_TypeError, "data_ptr method of Pointer object must return 64-bit int");
+    }
+    printf("enter return 3");
+    return (void*)PyLong_AsVoidPtr(ret);
+  }
+  PyErr_SetString(PyExc_TypeError, "Pointer argument must be either uint64 or have data_ptr method");
+  printf("enter return 4");
+  return (void*)0;
+}
+
+
+static PyObject* launch(PyObject* self, PyObject* args) {
+  printf("enter launch func");
+  int gridX, gridY, gridZ;
+  uint64_t _stream;
+  uint64_t _function;
+  int num_warps;
+  int num_ctas;
+  int clusterDimX;
+  int clusterDimY;
+  int clusterDimZ;
+  int shared_memory;
+  PyObject *launch_enter_hook = NULL;
+  PyObject *launch_exit_hook = NULL;
+  PyObject *compiled_kernel = NULL;
+  PyObject* _arg0;  PyObject* _arg1;  int32_t _arg2; 
+  if(!PyArg_ParseTuple(args, "iiiiiiiiiKKOOOOOi", &gridX, &gridY, &gridZ, &num_warps, &num_ctas, &clusterDimX, &clusterDimY, &clusterDimZ, &shared_memory, &_stream, &_function, &launch_enter_hook, &launch_exit_hook, &compiled_kernel, &_arg0, &_arg1, &_arg2)) {
+    return NULL;
+  }
+
+  if (launch_enter_hook != Py_None && !PyObject_CallObject(launch_enter_hook, args)) {
+    return NULL;
+  }
+
+
+  // raise exception asap
+  void* ptr_info0 = getPointer(_arg0, 0); if (!ptr_info0) return NULL;; void* ptr_info1 = getPointer(_arg1, 1); if (!ptr_info1) return NULL;; ;
+  Py_BEGIN_ALLOW_THREADS;
+  _launch(gridX, gridY, gridZ, num_warps, num_ctas, clusterDimX, clusterDimY, clusterDimZ, shared_memory, (CUstream)_stream, (CUfunction)_function, ptr_info0, ptr_info1, _arg2);
+  Py_END_ALLOW_THREADS;
+
+  if (launch_exit_hook != Py_None && !PyObject_CallObject(launch_exit_hook, args)) {
+    return NULL;
+  }
+
+  // return None
+  Py_INCREF(Py_None);
+  return Py_None;
+}
+
+static PyMethodDef ModuleMethods[] = {
+  {"launch", launch, METH_VARARGS, "Entry point for all kernels with this signature"},
+  {NULL, NULL, 0, NULL} // sentinel
+};
+
+static struct PyModuleDef ModuleDef = {
+  PyModuleDef_HEAD_INIT,
+  "__triton_launcher",
+  NULL, //documentation
+  -1, //size
+  ModuleMethods
+};
+
+PyMODINIT_FUNC PyInit___triton_launcher(void) {
+  PyObject *m = PyModule_Create(&ModuleDef);
+  if(m == NULL) {
+    return NULL;
+  }
+  PyModule_AddFunctions(m, ModuleMethods);
+  return m;
+}
+
+/tmp/tmpzh3ttdxx/main.c: In function ‘getPointer’:
+/tmp/tmpzh3ttdxx/main.c:91:10: warning: type defaults to ‘int’ in declaration of ‘ptrValue’ [-Wimplicit-int]
+   91 |     auto ptrValue = PyLong_AsVoidPtr(obj);
+      |          ^~~~~~~~
+/tmp/tmpzh3ttdxx/main.c:91:21: warning: initialization of ‘int’ from ‘void *’ makes integer from pointer without a cast [-Wint-conversion]
+   91 |     auto ptrValue = PyLong_AsVoidPtr(obj);
+      |                     ^~~~~~~~~~~~~~~~
+/tmp/tmpzh3ttdxx/main.c:96:12: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+   96 |     return (void*)ptrValue;
+      |            ^
+cache_dir: /home/chunyuan/.triton/cache
+self.key: 8f2b3321af404373c50b80d9226e3fab
+debug bin_path:  cubin
+enter launch funcenter PyLong_Checkenter return 3enter PyLong_Checkenter return 3enter _launch ctas 1tensor([0.4963])
+tensor([0.])
+The maximum difference between torch and triton is 0.49625658988952637
