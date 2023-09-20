@@ -9,7 +9,9 @@
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/TargetSelect.h"
+#include "llvm/TargetParser/Host.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
 #include "llvm/Transforms/IPO/AlwaysInliner.h"
 #include <filesystem>
 
@@ -119,5 +121,77 @@ std::string translateLLVMIRToPTX(llvm::Module &module, int cc, int version) {
     ;
   return result;
 }
+
+
+std::string translateLLVMIRToASM(llvm::Module &module, int cc, int version) {
+    printf("before InitializeAllTargets\n");
+    llvm::InitializeAllTargets();
+    llvm::InitializeAllTargetMCs();
+    llvm::InitializeAllAsmPrinters();
+    // llvm::InitializeAllAsmParsers();
+    printf("after InitializeAllTargets\n");
+
+    // Get the default target triple.
+    std::string defaultTargetTriple = llvm::sys::getDefaultTargetTriple();
+
+    std::string error;
+    const llvm::Target *target = llvm::TargetRegistry::lookupTarget(defaultTargetTriple, error);
+    if (!target) {
+        llvm::errs() << "Failed to initialize target: " << error << '\n';
+        return "";
+    }
+    printf("before targetMachine\n");
+    llvm::TargetOptions targetOptions;
+    llvm::CodeGenOpt::Level optimizationLevel = llvm::CodeGenOpt::Default;
+    printf("before createTargetMachine\n");
+    llvm::errs() << "defaultTargetTriple" << defaultTargetTriple << "\n";
+    llvm::errs() << "getHostCPUName" << llvm::sys::getHostCPUName() << "\n";
+    
+    llvm::TargetMachine *targetMachine = target->createTargetMachine(defaultTargetTriple,
+                                                                    llvm::sys::getHostCPUName(),
+                                                                    "",
+                                                                    targetOptions,
+                                                                    llvm::Reloc::PIC_,
+                                                                    llvm::CodeModel::Kernel,
+                                                                    optimizationLevel);
+    printf("after createTargetMachine\n");
+
+    if (!targetMachine) {
+    printf("fail createTargetMachine\n");
+
+        llvm::errs() << "Failed to create target machine\n";
+        return "";
+    }
+    printf("before stream\n");
+
+    // Set up a raw string stream to capture the assembly output.
+    std::string result;
+    {
+      llvm::raw_string_ostream stream(result);
+      llvm::buffer_ostream pstream(stream);
+    printf("before addPassesToEmitFile\n");
+
+      // Create a PassManager and add the target-specific code generator pass.
+      llvm::legacy::PassManager passManager;
+      targetMachine->addPassesToEmitFile(passManager, pstream, nullptr, llvm::CodeGenFileType::CGFT_AssemblyFile);
+
+      // Run the optimization and code generation passes on the module.
+      if (llvm::verifyModule(module)) {
+          llvm::errs() << "Module verification failed\n";
+          return "";
+      }
+    printf("before passManager\n");
+
+      passManager.run(module);
+    }
+    // Clean up the target machine.
+    delete targetMachine;
+    printf("before result\n");
+
+    // Return the generated assembly code as a string.
+    return result;
+
+}
+
 
 } // namespace triton

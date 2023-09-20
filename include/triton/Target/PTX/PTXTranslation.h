@@ -12,6 +12,8 @@ namespace triton {
 // Translate TritonGPU IR to PTX code.
 std::string translateLLVMIRToPTX(llvm::Module &module, int cc, int version);
 
+std::string translateLLVMIRToASM(llvm::Module &module, int cc, int version);
+
 } // namespace triton
 
 #endif

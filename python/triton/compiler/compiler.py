@@ -13,7 +13,7 @@ from typing import Any
 from .._C.libtriton.triton import (ClusterInfo, TMAInfos, add_external_libs,
                                    compile_ptx_to_cubin, get_env_vars, get_num_warps,
                                    get_shared_memory_size, ir, runtime,
-                                   translate_llvmir_to_ptx,
+                                   translate_llvmir_to_ptx, translate_llvmir_to_asm,
                                    translate_triton_gpu_to_llvmir, translate_omp_to_llvmir)
 from ..common.backend import get_backend, path_to_ptxas
 from ..common.build import is_hip
@@ -191,6 +191,18 @@ def llir_to_ptx(mod: Any, arch: int, ptx_version: int = None) -> str:
     return translate_llvmir_to_ptx(mod, arch, ptx_version)
 
 
+def llir_to_asm(mod: Any, arch: int, ptx_version: int = None) -> str:
+    '''
+    Translate TritonGPU module to PTX code.
+    :param mod: a TritonGPU dialect module
+    :return: PTX code
+    '''
+    if ptx_version is None:
+        _, cuda_version = path_to_ptxas()
+        ptx_version = ptx_get_version(cuda_version)
+    return translate_llvmir_to_asm(mod, arch, ptx_version)
+
+
 def ptx_to_cubin(ptx: str, arch: int):
     '''
     Compile TritonGPU module to cubin.
@@ -359,7 +371,7 @@ def add_cuda_stages(arch, extern_libs, stages):
 def add_cpu_stages(arch, extern_libs, stages):
     
     stages["ptx"] = (lambda path: Path(path).read_text(),
-                     lambda src: llir_to_ptx(src, arch))
+                     lambda src: llir_to_asm(src, arch))
     # TODO (chunyuan): ptx to cpu .so?
     stages["cubin"] = (lambda path: Path(path).read_bytes(),
                        lambda src: ptx_to_cubin(src, arch))    
@@ -682,7 +694,7 @@ class CompiledKernel:
 
         if self.shared > max_shared:
             raise OutOfResources(self.shared, max_shared, "shared memory")
-
+        print("debug bin_path: ", bin_path)
         mod, func, n_regs, n_spills = fn_load_binary(self.metadata["name"], self.asm[bin_path], self.shared, device)
 
         self.n_spills = n_spills

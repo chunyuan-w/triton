@@ -1919,6 +1919,29 @@ void init_triton_translation(py::module &m) {
       ret::take_ownership);
 
   m.def(
+      "translate_llvmir_to_asm",
+      [](const std::string llvmIR, int capability, int version) -> std::string {
+        py::gil_scoped_release allow_threads;
+        // create LLVM module from C++
+        llvm::LLVMContext context;
+        std::unique_ptr<llvm::MemoryBuffer> buffer =
+            llvm::MemoryBuffer::getMemBuffer(llvmIR.c_str());
+        llvm::SMDiagnostic error;
+        std::unique_ptr<llvm::Module> module =
+            llvm::parseIR(buffer->getMemBufferRef(), error, context);
+        if (!module) {
+          llvm::report_fatal_error(
+              "failed to parse IR: " + error.getMessage() +
+              "lineno: " + std::to_string(error.getLineNo()));
+        }
+        // translate module to PTX
+        auto ptxCode =
+            triton::translateLLVMIRToASM(*module, capability, version);
+        return ptxCode;
+      },
+      ret::take_ownership);
+
+  m.def(
       "compile_ptx_to_cubin",
       [](const std::string &ptxCode, const std::string &ptxasPath,
          int capability) -> py::object {
