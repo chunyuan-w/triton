@@ -169,11 +169,16 @@ std::string translateLLVMIRToASM(llvm::Module &module, int cc, int version) {
     {
       llvm::raw_string_ostream stream(result);
       llvm::buffer_ostream pstream(stream);
+
+
+      std::string outputFileName = "/home/eikan/local_disk/chunyuan/inductor/tmp_obj.o";
+      std::error_code error;
+      llvm::raw_fd_ostream dest(outputFileName, error);
     printf("before addPassesToEmitFile\n");
 
       // Create a PassManager and add the target-specific code generator pass.
       llvm::legacy::PassManager passManager;
-      targetMachine->addPassesToEmitFile(passManager, pstream, nullptr, llvm::CodeGenFileType::CGFT_AssemblyFile);
+      targetMachine->addPassesToEmitFile(passManager, dest, nullptr, llvm::CodeGenFileType::CGFT_ObjectFile);
 
       // Run the optimization and code generation passes on the module.
       if (llvm::verifyModule(module)) {
