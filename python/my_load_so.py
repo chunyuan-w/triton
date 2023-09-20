@@ -12,5 +12,11 @@ print("lib:", lib.add_kernel_0d1d2c)
 
 kernel = lib.add_kernel_0d1d2c
 
-kernel(torch.randn(1), torch.randn(2))
+
+a = torch.ones(1)
+b = torch.zeros(1)
+print(b)
+kernel(a.data_ptr(), b.data_ptr())
+
+print(b)
 
