@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .._C.libtriton.triton import (ClusterInfo, TMAInfos, add_external_libs,
-                                   compile_ptx_to_cubin, get_env_vars, get_num_warps,
+                                   compile_ptx_to_cubin, compile_ptx_to_so, get_env_vars, get_num_warps,
                                    get_shared_memory_size, ir, runtime,
                                    translate_llvmir_to_ptx, translate_llvmir_to_asm,
                                    translate_triton_gpu_to_llvmir, translate_omp_to_llvmir)
@@ -214,6 +214,42 @@ def ptx_to_cubin(ptx: str, arch: int):
     return compile_ptx_to_cubin(ptx, ptxas, arch)
 
 
+def ptx_to_so(ptx: str, arch: int):
+    import subprocess
+    '''
+    Compile TritonGPU module to cubin.
+    :param ptx: ptx code
+    :param compute_capability: compute capability
+    :return: str
+    '''
+    ptxas, _ = path_to_ptxas()
+    print("ptxas:", ptxas)
+    print("ptx:")
+    print(ptx)
+    print("done ptx")
+
+
+    output_filename = "tmp_output"
+    # Step 1: Write the assembly code to a file
+    with open("assembly.s", "w") as assembly_file:
+        assembly_file.write(ptx)
+
+    try:
+        # Step 2: Assemble the code to create an object file
+        subprocess.run(["as", "-o", "assembly.o", "assembly.s"])
+
+        # Step 3: Link the object file to create an executable
+        subprocess.run(["clang", "-o", output_filename, "assembly.o"])
+    
+    except subprocess.CalledProcessError as e:
+        print("Error:", e)
+    finally:
+        # Clean up intermediate files
+        subprocess.run(["rm", "assembly.s", "assembly.o"])
+
+    
+    return compile_ptx_to_so(ptx, ptxas, arch)
+
 # ------------------------------------------------------------------------------
 # compiler
 # ------------------------------------------------------------------------------
@@ -374,7 +410,7 @@ def add_cpu_stages(arch, extern_libs, stages):
                      lambda src: llir_to_asm(src, arch))
     # TODO (chunyuan): ptx to cpu .so?
     stages["cubin"] = (lambda path: Path(path).read_bytes(),
-                       lambda src: ptx_to_cubin(src, arch))    
+                       lambda src: ptx_to_so(src, arch))    
 
 
 
