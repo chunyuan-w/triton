@@ -47,6 +47,9 @@ struct UseInfo : public dataflow::AbstractSparseLattice {
       }
     case UseType::MixUse:
       return ChangeResult::NoChange;
+    default:
+      // cannot reach here
+      return ChangeResult::NoChange;
     }
   }
 
