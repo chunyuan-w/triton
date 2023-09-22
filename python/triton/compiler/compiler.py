@@ -293,6 +293,18 @@ def get_kernel_name(src: str, pattern: str) -> str:
             return line.split()[-1]
 
 
+def get_cpu_kernel_name(src: str, pattern: str) -> str:
+    '''
+    Get kernel name from llvm ir code.
+    This Kernel name is required when launching the kernel.
+    '''
+    assert src  
+    for line in src.split('\n'):
+        line = line.strip()
+        if line.startswith(pattern):
+            return line.split('@')[1].split('(')[0]
+
+
 def convert_type_repr(x):
     match = re.search(r'!tt\.ptr<(.*)>', x)
     if match is not None:
@@ -653,7 +665,9 @@ def compile(fn, **kwargs):
             asm["hsaco_path"] = next_module[1]
         if ir_name == "so":
             #  metadata["name"] = get_kernel_name(next_module, pattern='// .globl')
-            metadata["name"] = "add_kernel_0d1d2c"
+            # metadata["name"] = "add_kernel_0d1d2c"
+            metadata["name"] = get_cpu_kernel_name(module, pattern='define void @')
+            print("my kernel_name: ", metadata["name"])
         # TODO (chunyuan) skip for cpu for now
         if not is_cuda and not is_hip() and not device_type == "cpu":
             _device_backend.add_meta_info(ir_name, module, next_module, metadata, asm)
