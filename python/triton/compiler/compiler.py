@@ -258,11 +258,15 @@ def make_hash(fn, **kwargs):
         constants = kwargs.get("constants", dict())
         num_warps = kwargs.get("num_warps", 4)
         num_stages = kwargs.get("num_stages", 3)
+        device_type = kwargs.get("device_type", None)
         debug = kwargs.get("debug", False)
         # Get unique key for the compiled code
         get_conf_key = lambda conf: (sorted(conf.divisible_by_16), sorted(conf.equal_to_1))
         configs_key = [get_conf_key(conf) for conf in configs]
         key = f"{fn.cache_key}-{''.join(signature.values())}-{configs_key}-{constants}-{num_warps}-{num_stages}-{debug}"
+        if device_type == "cpu":
+            print("cpu included in key gen")
+            key += f"-{device_type}"        
         return hashlib.md5(key.encode("utf-8")).hexdigest()
     assert isinstance(fn, str)
     return hashlib.md5((Path(fn).read_text() + triton.runtime.jit.version_key()).encode("utf-8")).hexdigest()
@@ -366,6 +370,8 @@ def compile(fn, **kwargs):
     num_warps = kwargs.get("num_warps", 4)
     num_stages = kwargs.get("num_stages", 3 if is_cuda and arch >= 75 else 2)
     extern_libs = kwargs.get("extern_libs", dict())
+    device_type = "cpu"
+    print("my device_type:", device_type)
     if extern_libs is None:
         extern_libs = dict()
     debug = kwargs.get("debug", False)
@@ -409,7 +415,7 @@ def compile(fn, **kwargs):
         first_stage = list(stages.keys()).index(ir)
 
     # cache manager
-    so_path = make_stub(name, signature, constants)
+    so_path = make_stub(name, signature, constants, device_type)
     # create cache manager
     fn_cache_manager = get_cache_manager(make_hash(fn, **kwargs))
     # determine name and extension type of provided function
