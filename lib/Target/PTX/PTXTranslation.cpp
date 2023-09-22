@@ -9,6 +9,7 @@
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/FileUtilities.h"
 #include "llvm/TargetParser/Host.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
@@ -17,6 +18,7 @@
 
 #include <mutex>
 #include <optional>
+#include <fstream>
 
 #include <mutex>
 #include <optional>
@@ -164,6 +166,17 @@ std::string translateLLVMIRToASM(llvm::Module &module, int cc, int version) {
     }
     printf("before stream\n");
 
+    
+    llvm::SmallString<64> fsrc;
+    llvm::sys::fs::createTemporaryFile("compile-ptx-src", "", fsrc);
+    std::string fbin = std::string(fsrc) + ".o";
+    llvm::FileRemover binRemover(fbin);
+    const char *_fsrc = fsrc.c_str();
+    const char *_fbin = fbin.c_str();
+    auto outputFileName = std::string(_fsrc) + ".o";
+    
+    std::string cubin;
+
     // Set up a raw string stream to capture the assembly output.
     std::string result;
     {
@@ -171,7 +184,7 @@ std::string translateLLVMIRToASM(llvm::Module &module, int cc, int version) {
       llvm::buffer_ostream pstream(stream);
 
 
-      std::string outputFileName = "/home/eikan/local_disk/chunyuan/inductor/tmp_obj.o";
+      // std::string outputFileName = "/home/eikan/local_disk/chunyuan/inductor/tmp_obj.o";
       std::error_code error;
       llvm::raw_fd_ostream dest(outputFileName, error);
     printf("before addPassesToEmitFile\n");
@@ -185,17 +198,29 @@ std::string translateLLVMIRToASM(llvm::Module &module, int cc, int version) {
           llvm::errs() << "Module verification failed\n";
           return "";
       }
-    printf("before passManager\n");
+      printf("before passManager\n");
 
       passManager.run(module);
+
+
+
+
+
+
+
+      llvm::FileRemover srcRemover(fsrc);
+      std::ifstream _cubin(_fbin, std::ios::binary);
+      cubin = std::string(std::istreambuf_iterator<char>(_cubin), {});
+      _cubin.close();
+
+
+
     }
     // Clean up the target machine.
     delete targetMachine;
     printf("before result\n");
 
-    // Return the generated assembly code as a string.
-    return result;
-
+      return cubin;
 }
 
 

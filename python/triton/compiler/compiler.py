@@ -13,7 +13,7 @@ from typing import Any
 from .._C.libtriton.triton import (ClusterInfo, TMAInfos, add_external_libs,
                                    compile_ptx_to_cubin, compile_ptx_to_so, get_env_vars, get_num_warps,
                                    get_shared_memory_size, ir, runtime,
-                                   translate_llvmir_to_ptx, translate_llvmir_to_asm,
+                                   translate_llvmir_to_ptx, translate_llvmir_to_so,
                                    translate_triton_gpu_to_llvmir, translate_omp_to_llvmir)
 from ..common.backend import get_backend, path_to_ptxas
 from ..common.build import is_hip
@@ -161,6 +161,15 @@ def ompir_to_llir(mod, extern_libs, arch, tma_infos):
     return translate_omp_to_llvmir(mod, arch, tma_infos, runtime.TARGET.NVVM)
 
 
+
+def load_cpu_binary(func_name, file_so_path, shared, device):
+    from ctypes import cdll
+    file_so_path = "/home/eikan/local_disk/chunyuan/inductor/triton/python/tmp_kernel.so"
+    
+    lib = cdll.LoadLibrary(file_so_path)
+    kernel = getattr(lib, func_name)
+    return lib, kernel, 1, 1
+
 # PTX translation
 
 @functools.lru_cache()
@@ -191,7 +200,7 @@ def llir_to_ptx(mod: Any, arch: int, ptx_version: int = None) -> str:
     return translate_llvmir_to_ptx(mod, arch, ptx_version)
 
 
-def llir_to_asm(mod: Any, arch: int, ptx_version: int = None) -> str:
+def llir_to_so(mod: Any, arch: int, ptx_version: int = None) -> str:
     '''
     Translate TritonGPU module to PTX code.
     :param mod: a TritonGPU dialect module
@@ -200,7 +209,8 @@ def llir_to_asm(mod: Any, arch: int, ptx_version: int = None) -> str:
     if ptx_version is None:
         _, cuda_version = path_to_ptxas()
         ptx_version = ptx_get_version(cuda_version)
-    return translate_llvmir_to_asm(mod, arch, ptx_version)
+    obj_file = translate_llvmir_to_so(mod, arch, ptx_version)
+    return obj_file
 
 
 def ptx_to_cubin(ptx: str, arch: int):
@@ -406,11 +416,11 @@ def add_cuda_stages(arch, extern_libs, stages):
 
 def add_cpu_stages(arch, extern_libs, stages):
     
-    stages["ptx"] = (lambda path: Path(path).read_text(),
-                     lambda src: llir_to_asm(src, arch))
+    # stages["ptx"] = (lambda path: Path(path).read_text(),
+    #                  lambda src: llir_to_asm(src, arch))
     # TODO (chunyuan): ptx to cpu .so?
     stages["cubin"] = (lambda path: Path(path).read_bytes(),
-                       lambda src: ptx_to_so(src, arch))    
+                       lambda src: llir_to_so(src, arch))    
 
 
 
@@ -624,6 +634,9 @@ def compile(fn, **kwargs):
         if ir_name == "amdgcn":
             metadata["name"] = get_kernel_name(next_module[0], pattern='.globl')
             asm["hsaco_path"] = next_module[1]
+        if device_type == "cpu" and ir_name == "cubin":
+            #  metadata["name"] = get_kernel_name(next_module, pattern='// .globl')
+            metadata["name"] = "add_kernel_0d1d2c"
         # TODO (chunyuan) skip for cpu for now
         if not is_cuda and not is_hip() and not device_type == "cpu":
             _device_backend.add_meta_info(ir_name, module, next_module, metadata, asm)
@@ -720,7 +733,7 @@ class CompiledKernel:
             # TODO (chunyuan): .so for CPU?
             # bin_path = "so"
             max_shared = driver.utils.get_device_properties(device)["max_shared_mem"]
-            fn_load_binary = driver.utils.load_binary            
+            fn_load_binary = load_cpu_binary            
         else:
             assert self.device_backend
             device = self.device_backend.get_current_device()
@@ -730,8 +743,11 @@ class CompiledKernel:
 
         if self.shared > max_shared:
             raise OutOfResources(self.shared, max_shared, "shared memory")
-        print("debug bin_path: ", bin_path)
-        mod, func, n_regs, n_spills = fn_load_binary(self.metadata["name"], self.asm[bin_path], self.shared, device)
+        print("self.metadata[name]: ", self.metadata["name"])
+        if self.device_type in ["cpu"]:
+            mod, func, n_regs, n_spills = fn_load_binary(self.metadata["name"], self.asm[bin_path], self.shared, device)
+        else:
+            mod, func, n_regs, n_spills = fn_load_binary(self.metadata["name"], self.asm[bin_path], self.shared, device)
 
         self.n_spills = n_spills
         self.n_regs = n_regs

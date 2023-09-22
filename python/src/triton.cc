@@ -1919,8 +1919,8 @@ void init_triton_translation(py::module &m) {
       ret::take_ownership);
 
   m.def(
-      "translate_llvmir_to_asm",
-      [](const std::string llvmIR, int capability, int version) -> std::string {
+      "translate_llvmir_to_so",
+      [](const std::string llvmIR, int capability, int version) -> py::object {
         py::gil_scoped_release allow_threads;
         // create LLVM module from C++
         llvm::LLVMContext context;
@@ -1935,9 +1935,12 @@ void init_triton_translation(py::module &m) {
               "lineno: " + std::to_string(error.getLineNo()));
         }
         // translate module to PTX
-        auto ptxCode =
+        auto cubin =
             triton::translateLLVMIRToASM(*module, capability, version);
-        return ptxCode;
+        
+        py::bytes bytes(cubin);
+        return std::move(bytes);
+        
       },
       ret::take_ownership);
 
