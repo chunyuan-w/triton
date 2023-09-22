@@ -13,7 +13,7 @@ from typing import Any
 from .._C.libtriton.triton import (ClusterInfo, TMAInfos, add_external_libs,
                                    compile_ptx_to_cubin, compile_ptx_to_so, get_env_vars, get_num_warps,
                                    get_shared_memory_size, ir, runtime,
-                                   translate_llvmir_to_ptx, translate_llvmir_to_so,
+                                   translate_llvmir_to_ptx, translate_llvmir_to_obj,
                                    translate_triton_gpu_to_llvmir, translate_omp_to_llvmir)
 from ..common.backend import get_backend, path_to_ptxas
 from ..common.build import is_hip
@@ -162,12 +162,17 @@ def ompir_to_llir(mod, extern_libs, arch, tma_infos):
 
 
 
-def load_cpu_binary(func_name, file_so_path, shared, device):
+def load_cpu_binary(func_name, file_so, shared, device):
     from ctypes import cdll
-    file_so_path = "/home/eikan/local_disk/chunyuan/inductor/triton/python/tmp_kernel.so"
-    
-    lib = cdll.LoadLibrary(file_so_path)
-    kernel = getattr(lib, func_name)
+    # file_so_path = "/home/eikan/local_disk/chunyuan/inductor/triton/python/tmp_kernel.so"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        file_so_path = os.path.join(tmpdir, "kernel.so")
+
+        with open(file_so_path, "wb") as f:
+            f.write(file_so)
+        
+        lib = cdll.LoadLibrary(file_so_path)
+        kernel = getattr(lib, func_name)
     return lib, kernel, 1, 1
 
 # PTX translation
@@ -201,6 +206,7 @@ def llir_to_ptx(mod: Any, arch: int, ptx_version: int = None) -> str:
 
 
 def llir_to_so(mod: Any, arch: int, ptx_version: int = None) -> str:
+    import subprocess
     '''
     Translate TritonGPU module to PTX code.
     :param mod: a TritonGPU dialect module
@@ -209,8 +215,19 @@ def llir_to_so(mod: Any, arch: int, ptx_version: int = None) -> str:
     if ptx_version is None:
         _, cuda_version = path_to_ptxas()
         ptx_version = ptx_get_version(cuda_version)
-    obj_file = translate_llvmir_to_so(mod, arch, ptx_version)
-    return obj_file
+    obj_file = translate_llvmir_to_obj(mod, arch, ptx_version)
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        obj_path = os.path.join(tmpdir, "tmp.o")
+        so_file_path = os.path.join(tmpdir, "tmp.so")
+        with open(obj_path, "wb") as f:
+            f.write(obj_file)        
+        subprocess.run(["clang", obj_path, "-shared", "-o", so_file_path])
+        
+        with open(so_file_path, "rb") as f:
+            ret = f.read()
+    return ret
+
 
 
 def ptx_to_cubin(ptx: str, arch: int):
@@ -419,7 +436,7 @@ def add_cpu_stages(arch, extern_libs, stages):
     # stages["ptx"] = (lambda path: Path(path).read_text(),
     #                  lambda src: llir_to_asm(src, arch))
     # TODO (chunyuan): ptx to cpu .so?
-    stages["cubin"] = (lambda path: Path(path).read_bytes(),
+    stages["so"] = (lambda path: Path(path).read_bytes(),
                        lambda src: llir_to_so(src, arch))    
 
 
@@ -608,7 +625,7 @@ def compile(fn, **kwargs):
                 else:
                     next_module = parse(path)
 
-        if ir_name == "cubin":
+        if ir_name in ["cubin", "so"]:
             asm[ir_name] = next_module
         elif ir_name == "amdgcn":
             asm[ir_name] = str(next_module[0])
@@ -634,7 +651,7 @@ def compile(fn, **kwargs):
         if ir_name == "amdgcn":
             metadata["name"] = get_kernel_name(next_module[0], pattern='.globl')
             asm["hsaco_path"] = next_module[1]
-        if device_type == "cpu" and ir_name == "cubin":
+        if ir_name == "so":
             #  metadata["name"] = get_kernel_name(next_module, pattern='// .globl')
             metadata["name"] = "add_kernel_0d1d2c"
         # TODO (chunyuan) skip for cpu for now
@@ -728,7 +745,7 @@ class CompiledKernel:
             device = get_current_device()
             bin_path = {
                 driver.HIP: "hsaco_path",
-                driver.CUDA: "cubin"
+                driver.CUDA: "so"
             }[driver.backend]
             # TODO (chunyuan): .so for CPU?
             # bin_path = "so"

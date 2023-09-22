@@ -1919,7 +1919,7 @@ void init_triton_translation(py::module &m) {
       ret::take_ownership);
 
   m.def(
-      "translate_llvmir_to_so",
+      "translate_llvmir_to_obj",
       [](const std::string llvmIR, int capability, int version) -> py::object {
         py::gil_scoped_release allow_threads;
         // create LLVM module from C++
