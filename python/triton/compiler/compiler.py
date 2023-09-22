@@ -691,7 +691,7 @@ class CompiledKernel:
         mod = importlib.util.module_from_spec(spec)
         self.fn = fn
         spec.loader.exec_module(mod)
-        self.c_wrapper = getattr(mod, "launch")
+        # self.c_wrapper = getattr(mod, "launch")
         # initialize metadata
         self.shared = metadata["shared"]
         self.num_warps = metadata["num_warps"]
@@ -755,19 +755,20 @@ class CompiledKernel:
         self.cu_function = func
 
     def __getattribute__(self, name):
-        if name == 'c_wrapper':
+        if name == 'cu_function':
             self._init_handles()
         return super().__getattribute__(name)
 
     # capture args and expand args with cutensormap*
     def assemble_tensormap_to_arg(self, args):
-        args_with_tma = list(args)
-        if hasattr(self, 'tensormaps_info'):
-            # tuple for hashable
-            args_ptr = tuple([arg.data_ptr() if hasattr(arg, 'data_ptr') else arg for arg in args])
-            for i, e in enumerate(self.tensormaps_info):
-                args_with_tma.append(CompiledKernel.tensormap_manager[(e, args_ptr)])
-        return args_with_tma
+        args_ptr = tuple([arg.data_ptr() if hasattr(arg, 'data_ptr') else arg for arg in args])
+        return args_ptr
+        # if hasattr(self, 'tensormaps_info'):
+        #     # tuple for hashable
+        #     args_ptr = tuple([arg.data_ptr() if hasattr(arg, 'data_ptr') else arg for arg in args])
+        #     for i, e in enumerate(self.tensormaps_info):
+        #         args_with_tma.append(CompiledKernel.tensormap_manager[(e, args_ptr)])
+        # return args_with_tma
 
     def __getitem__(self, grid):
         self._init_handles()
@@ -779,9 +780,10 @@ class CompiledKernel:
                     stream = get_cuda_stream()
                 else:
                     stream = get_backend(self.device_type).get_stream(None)
-            self.c_wrapper(grid[0], grid[1], grid[2], self.num_warps, self.num_ctas, self.clusterDims[0],
-                           self.clusterDims[1], self.clusterDims[2], self.shared, stream, self.cu_function,
-                           CompiledKernel.launch_enter_hook, CompiledKernel.launch_exit_hook, self, *args_expand)
+            self.cu_function(*args_expand)
+            # self.c_wrapper(grid[0], grid[1], grid[2], self.num_warps, self.num_ctas, self.clusterDims[0],
+            #                self.clusterDims[1], self.clusterDims[2], self.shared, stream, self.cu_function,
+            #                CompiledKernel.launch_enter_hook, CompiledKernel.launch_exit_hook, self, )
         return runner
 
     def get_sass(self, fun=None):
