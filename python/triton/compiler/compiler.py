@@ -415,7 +415,8 @@ def compile(fn, **kwargs):
         first_stage = list(stages.keys()).index(ir)
 
     # cache manager
-    so_path = make_stub(name, signature, constants, device_type)
+    # so_path = make_stub(name, signature, constants, device_type)
+    so_path = ""
     # create cache manager
     fn_cache_manager = get_cache_manager(make_hash(fn, **kwargs))
     # determine name and extension type of provided function
@@ -509,10 +510,10 @@ class CompiledKernel:
         # initialize launcher
         import importlib.util
         spec = importlib.util.spec_from_file_location("__triton_launcher", so_path)
-        mod = importlib.util.module_from_spec(spec)
+        # mod = importlib.util.module_from_spec(spec)
         self.fn = fn
-        spec.loader.exec_module(mod)
-        self.c_wrapper = getattr(mod, "launch")
+        # spec.loader.exec_module(mod)
+        # self.c_wrapper = getattr(mod, "launch")
         # initialize metadata
         self.shared = metadata["shared"]
         self.num_warps = metadata["num_warps"]
@@ -546,18 +547,24 @@ class CompiledKernel:
         self.cu_function = func
 
     def __getattribute__(self, name):
-        if name == 'c_wrapper':
+        if name == 'cu_function':
             self._init_handles()
         return super().__getattribute__(name)
+
+    def assemble_tensormap_to_arg(self, args):
+        args_ptr = tuple([arg.data_ptr() if hasattr(arg, 'data_ptr') else arg for arg in args])
+        return args_ptr
 
     def __getitem__(self, grid):
         self._init_handles()
 
         def runner(*args, stream=None):
+            args_expand = self.assemble_tensormap_to_arg(args)
             if stream is None:
                 stream = triton.runtime.jit.get_cuda_stream()
-            self.c_wrapper(grid[0], grid[1], grid[2], self.num_warps, self.shared, stream, self.cu_function,
-                           CompiledKernel.launch_enter_hook, CompiledKernel.launch_exit_hook, self, *args)
+            self.cu_function(*args_expand)
+            # self.c_wrapper(grid[0], grid[1], grid[2], self.num_warps, self.shared, stream, self.cu_function,
+            #                CompiledKernel.launch_enter_hook, CompiledKernel.launch_exit_hook, self, *args)
         return runner
 
     def get_sass(self, fun=None):
