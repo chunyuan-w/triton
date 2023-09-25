@@ -28,6 +28,11 @@ translateTritonGPUToLLVMIR(llvm::LLVMContext *llvmContext,
                            mlir::ModuleOp module, int computeCapability,
                            bool isROCM);
 
+std::unique_ptr<llvm::Module>
+translateLinalgToLLVMIR(llvm::LLVMContext *llvmContext,
+                           mlir::ModuleOp module, int computeCapability,
+                           bool isROCM);
+
 // Translate mlir LLVM dialect to LLVMIR, return null if failed.
 std::unique_ptr<llvm::Module>
 translateLLVMToLLVMIR(llvm::LLVMContext *llvmContext, mlir::ModuleOp module,

@@ -347,6 +347,60 @@ translateTritonGPUToLLVMIR(llvm::LLVMContext *llvmContext,
   return llvmIR;
 }
 
+std::unique_ptr<llvm::Module>
+translateLinalgToLLVMIR(llvm::LLVMContext *llvmContext,
+                           mlir::ModuleOp module, int computeCapability,
+                           bool isROCM) {
+  mlir::PassManager pm(module->getContext());
+  mlir::registerPassManagerCLOptions();
+  if (failed(applyPassManagerCLOptions(pm))) {
+    llvm::errs() << "failed to apply pass manager CL options\n";
+    return nullptr;
+  }
+  auto printingFlags = mlir::OpPrintingFlags();
+  printingFlags.elideLargeElementsAttrs(16);
+  pm.enableIRPrinting(
+      /*shouldPrintBeforePass=*/nullptr,
+      /*shouldPrintAfterPass=*/
+      [](mlir::Pass *pass, mlir::Operation *) {
+        return ::triton::tools::getBoolEnv("MLIR_ENABLE_DUMP");
+      },
+      /*printModuleScope=*/false,
+      /*printAfterOnlyOnChange=*/true,
+      /*printAfterOnlyOnFailure*/ false, llvm::dbgs(), printingFlags);
+
+  pm.addPass(mlir::createConvertVectorToSCFPass());
+  pm.addPass(mlir::createConvertIndexToLLVMPass());
+  // pm.addPass(createConvertTritonGPUToLLVMPass(computeCapability, isROCM));
+  pm.addPass(mlir::createArithToLLVMConversionPass());
+  pm.addPass(mlir::createCanonicalizerPass());
+  // Simplify the IR
+  pm.addPass(mlir::createCSEPass());
+  pm.addPass(mlir::createSymbolDCEPass());
+
+  if (failed(pm.run(module))) {
+    llvm::errs() << "Pass execution failed";
+    return nullptr;
+  }
+
+  auto llvmIR = translateLLVMToLLVMIR(llvmContext, module, isROCM);
+  if (!llvmIR) {
+    llvm::errs() << "Translate to LLVM IR failed";
+    return nullptr;
+  }
+
+  if (::triton::tools::getBoolEnv("LLVM_IR_ENABLE_DUMP")) {
+    std::string mod_string;
+    std::unique_ptr<llvm::raw_string_ostream> ir_ss(
+        new llvm::raw_string_ostream(mod_string));
+    llvmIR->print(*ir_ss, nullptr);
+    std::cout << "// -----// LLVM IR Dump //----- //\n"
+              << mod_string << std::endl;
+  }
+
+  return llvmIR;
+}
+
 void addExternalLibs(mlir::ModuleOp &module,
                      const std::vector<std::string> &names,
                      const std::vector<std::string> &paths) {

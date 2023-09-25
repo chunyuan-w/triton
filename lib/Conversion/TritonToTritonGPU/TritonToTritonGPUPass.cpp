@@ -812,11 +812,58 @@ public:
   }
 };
 
+class ConvertTritonToLinalg
+    : public ConvertTritonToTritonGPUBase<ConvertTritonToLinalg> {
+public:
+  ConvertTritonToLinalg() = default;
+  // constructor with some parameters set explicitly.
+  ConvertTritonToLinalg(int numWarps) { this->numWarps = numWarps; }
+
+  void runOnOperation() override {
+    MLIRContext *context = &getContext();
+    ModuleOp mod = getOperation();
+    // type converter
+    TritonGPUTypeConverter typeConverter(context, numWarps);
+    TritonGPUConversionTarget target(*context, typeConverter);
+    // rewrite patterns
+    RewritePatternSet patterns(context);
+    // add rules
+    populateStdPatternsAndLegality(typeConverter, patterns, target);
+    populateArithPatternsAndLegality(typeConverter, patterns, target);
+    populateMathPatternsAndLegality(typeConverter, patterns, target);
+    populateTritonPatterns(typeConverter, patterns);
+    // TODO: can we use
+    //    mlir::scf::populateSCFStructurealTypeConversionsAndLegality(...) here?
+    populateSCFPatterns(typeConverter, patterns);
+    populateCFPatterns(typeConverter, patterns);
+
+    if (failed(applyPartialConversion(mod, target, std::move(patterns))))
+      return signalPassFailure();
+
+    auto inti = llvm::APSInt(32, false);
+    auto i32_ty = IntegerType::get(mod->getContext(), 32);
+
+    mod->setAttr(
+        AttrNumWarpsName,
+        IntegerAttr::get(i32_ty, llvm::APInt(32, numWarps.getValue())));
+
+    // update layouts
+    //  broadcast src => multicast, dst => broadcasted
+    // if (failed(target.refineLayouts(mod, numWarps)))
+    //   return signalPassFailure();
+  }
+};
+
 } // namespace
 
 std::unique_ptr<OperationPass<ModuleOp>>
 mlir::triton::createConvertTritonToTritonGPUPass(int numWarps) {
   return std::make_unique<::ConvertTritonToTritonGPU>(numWarps);
+}
+
+std::unique_ptr<OperationPass<ModuleOp>>
+mlir::triton::createConvertTritonToLinalgPass(int numWarps) {
+  return std::make_unique<::ConvertTritonToLinalg>(numWarps);
 }
 
 std::unique_ptr<OperationPass<ModuleOp>>

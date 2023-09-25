@@ -65,6 +65,15 @@ def ttir_to_ttgir(mod, num_warps):
     return mod
 
 
+def ttir_to_linalgir(mod, num_warps):
+    # TODO (chunyuan): what is in mod.context?
+    pm = _triton.ir.pass_manager(mod.context)
+    pm.enable_debug()
+    pm.add_convert_triton_to_linalg_pass(num_warps)
+    pm.run(mod)
+    return mod   
+
+
 def optimize_ttgir(mod, num_stages, arch):
     pm = _triton.ir.pass_manager(mod.context)
     pm.enable_debug()
@@ -86,6 +95,17 @@ def optimize_ttgir(mod, num_stages, arch):
     return mod
 
 
+def optimize_linalgir(mod, num_stages, arch):
+    # TODO: add passes
+    pm = _triton.ir.pass_manager(mod.context)
+    pm.enable_debug()
+    pm.add_empty_tensor_to_alloc_tensor()
+    pm.add_one_shot_bufferize()
+    # pm.add_test_lower_to_llvm()
+    pm.run(mod)
+    return mod
+
+
 def _add_external_libs(mod, libs):
     for name, path in libs.items():
         if len(name) == 0 or len(path) == 0:
@@ -101,6 +121,10 @@ def ttgir_to_llir(mod, extern_libs, arch):
         return _triton.translate_triton_gpu_to_llvmir(mod, arch, False)
     else:
         return _triton.translate_triton_gpu_to_llvmir(mod, 0, True)
+
+
+def linalgir_to_llir(mod, extern_libs, arch):
+    return _triton.translate_linalg_to_llvmir(mod, 0, True)
 
 
 # PTX translation
@@ -380,12 +404,21 @@ def compile(fn, **kwargs):
     stages["ast"] = (lambda path: fn, None)
     stages["ttir"] = (lambda path: parse_mlir_module(path, context),
                       lambda src: optimize_ttir(ast_to_ttir(src, signature, configs[0], constants, debug=debug), arch))
-    stages["ttgir"] = (lambda path: parse_mlir_module(path, context),
-                       lambda src: optimize_ttgir(ttir_to_ttgir(src, num_warps), num_stages, arch))
-    stages["llir"] = (lambda path: Path(path).read_text(),
-                      lambda src: ttgir_to_llir(src, extern_libs, arch))
+    
+    if device_type == "cpu":
+        stages["linalgir"] = (lambda path: parse_mlir_module(path, context),
+                           lambda src: optimize_linalgir(ttir_to_linalgir(src, num_warps), num_stages, arch))
+        stages["llir"] = (lambda path: Path(path).read_text(),
+                          lambda src: linalgir_to_llir(src, extern_libs, arch))          
+    else:        
+        stages["ttgir"] = (lambda path: parse_mlir_module(path, context),
+                        lambda src: optimize_ttgir(ttir_to_ttgir(src, num_warps), num_stages, arch))
+        stages["llir"] = (lambda path: Path(path).read_text(),
+                        lambda src: ttgir_to_llir(src, extern_libs, arch))
     if is_cuda:
         add_cuda_stages(arch, extern_libs, stages)
+    elif device_type == "cpu":
+        add_cpu_stages(arch, extern_libs, stages)
     else:
         add_rocm_stages(arch, extern_libs, stages)
 

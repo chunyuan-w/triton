@@ -16,9 +16,12 @@
 #include "mlir/Dialect/Index/IR/IndexDialect.h"
 #include "mlir/Dialect/Index/IR/IndexOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/Bufferization/Transforms/Passes.h"
+#include "mlir/Dialect/Bufferization/Transforms/OneShotAnalysis.h"
 #include "triton/Analysis/Allocation.h"
 #include "triton/Conversion/TritonGPUToLLVM/TritonGPUToLLVMPass.h"
 #include "triton/Conversion/TritonToTritonGPU/TritonToTritonGPUPass.h"
+#include "triton/Conversion/TritonToLinalg/TritonToLinalg.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/Triton/IR/Types.h"
 #include "triton/Dialect/Triton/Transforms/Passes.h"
@@ -1488,6 +1491,28 @@ void init_triton_ir(py::module &&m) {
              self.addPass(
                  mlir::triton::createConvertTritonToTritonGPUPass(numWarps));
            })
+      .def("add_convert_triton_to_linalg_pass",
+           [](mlir::PassManager &self, int numWarps) {
+             self.addPass(
+                 mlir::triton::createTritonToLinalgPass());
+           })
+      .def("add_empty_tensor_to_alloc_tensor",
+           [](mlir::PassManager &self) {
+             self.addPass(
+                 mlir::bufferization::createEmptyTensorToAllocTensorPass());
+           })    
+      .def("add_one_shot_bufferize",
+           [](mlir::PassManager &self) {
+             mlir::bufferization::OneShotBufferizationOptions options;
+             options.allowReturnAllocs =true;
+             self.addPass(
+                 mlir::bufferization::createOneShotBufferizePass(options));
+           })   
+     //  .def("add_test_lower_to_llvm",
+     //       [](mlir::PassManager &self, int numWarps) {
+     //         self.addPass(
+     //             mlir::createTestLowerToLLVMPass());
+     //       })                                       
       .def("add_tritongpu_pipeline_pass",
            [](mlir::PassManager &self, int numStages) {
              self.addPass(mlir::createTritonGPUPipelinePass(numStages));
@@ -1540,6 +1565,24 @@ void init_triton_translation(py::module &m) {
         py::gil_scoped_release allow_threads;
         llvm::LLVMContext llvmContext;
         auto llvmModule = ::mlir::triton::translateTritonGPUToLLVMIR(
+            &llvmContext, op, computeCapability, isROCM);
+        if (!llvmModule)
+          llvm::report_fatal_error("Failed to translate TritonGPU to LLVM IR.");
+
+        std::string str;
+        llvm::raw_string_ostream os(str);
+        llvmModule->print(os, nullptr);
+        os.flush();
+        return str;
+      },
+      ret::take_ownership);
+
+  m.def(
+      "translate_linalg_to_llvmir",
+      [](mlir::ModuleOp op, int computeCapability, bool isROCM) {
+        py::gil_scoped_release allow_threads;
+        llvm::LLVMContext llvmContext;
+        auto llvmModule = ::mlir::triton::translateLinalgToLLVMIR(
             &llvmContext, op, computeCapability, isROCM);
         if (!llvmModule)
           llvm::report_fatal_error("Failed to translate TritonGPU to LLVM IR.");
